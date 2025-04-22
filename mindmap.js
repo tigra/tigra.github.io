@@ -91,65 +91,68 @@ document.addEventListener('DOMContentLoaded', function() {
             .replace(/'/g, '&apos;');
     }
 
-    // Parse mindmap markdown
+    /**
+     * Parse markdown text into a mindmap structure
+     * @param {string} markdown - The markdown text to parse
+     * @return {Node|null} The root node of the mindmap, or null if no valid nodes were found
+     */
     function parseMindmap(markdown) {
-        var lines = markdown.split('\n');
-        var root = { text: '', children: [], level: 0 };
-        var stack = [root];
-        var currentHeadingLevel = 0;
+      const lines = markdown.split('\n');
+      const root = new Node('', 0);
+      const stack = [root];
+      let currentHeadingLevel = 0;
 
-        for (var i = 0; i < lines.length; i++) {
-            var line = lines[i].trim();
-            if (!line) continue;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
 
-            var node;
-            var level = 0;
-            var text = '';
+        let level = 0;
+        let text = '';
 
-            // Check if it's a heading
-            if (line.startsWith('#')) {
-                // Count # characters to determine level
-                for (var j = 0; j < line.length; j++) {
-                    if (line[j] === '#') level++;
-                    else break;
-                }
+        // Check if it's a heading
+        if (line.startsWith('#')) {
+          // Count # characters to determine level
+          for (let j = 0; j < line.length; j++) {
+            if (line[j] === '#') level++;
+            else break;
+          }
 
-                // Extract text
-                text = line.substring(level).trim();
-                currentHeadingLevel = level;
-            }
-            // Check if it's a bullet point
-            else if (line.startsWith('-') || line.startsWith('*')) {
-                // Get raw line to calculate actual indentation
-                var rawLine = lines[i];
-                var indentLength = rawLine.length - rawLine.trimLeft().length;
-                var bulletDepth = Math.floor(indentLength / 2); // Assuming 2 spaces per level
+          // Extract text
+          text = line.substring(level).trim();
+          currentHeadingLevel = level;
+        }
+        // Check if it's a bullet point
+        else if (line.startsWith('-') || line.startsWith('*')) {
+          // Get raw line to calculate actual indentation
+          const rawLine = lines[i];
+          const indentLength = rawLine.length - rawLine.trimLeft().length;
+          const bulletDepth = Math.floor(indentLength / 2); // Assuming 2 spaces per level
 
-                // Bullet points should be children of the current heading
-                level = currentHeadingLevel + bulletDepth + 1;
+          // Bullet points should be children of the current heading
+          level = currentHeadingLevel + bulletDepth + 1;
 
-                // Extract text
-                text = line.substring(1).trim(); // Remove the '-' character
-            } else {
-                continue; // Skip lines that aren't headings or bullet points
-            }
-
-            // Create node
-            node = { text: text, children: [], level: level };
-
-            // Find the parent node
-            while (stack.length > 1 && stack[stack.length - 1].level >= level) {
-                stack.pop();
-            }
-
-            // Add to parent
-            stack[stack.length - 1].children.push(node);
-
-            // Add to stack
-            stack.push(node);
+          // Extract text
+          text = line.substring(1).trim(); // Remove the '-' character
+        } else {
+          continue; // Skip lines that aren't headings or bullet points
         }
 
-        return root.children.length > 0 ? root.children[0] : null;
+        // Create node
+        const node = new Node(text, level);
+
+        // Find the parent node
+        while (stack.length > 1 && stack[stack.length - 1].level >= level) {
+          stack.pop();
+        }
+
+        // Add to parent
+        stack[stack.length - 1].addChild(node);
+
+        // Add to stack
+        stack.push(node);
+      }
+
+      return root.hasChildren() ? root.children[0] : null;
     }
 
     // Set up help button functionality
@@ -296,149 +299,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Calculate dimensions of a node based on text
-    function getNodeSize(text, isRoot, layout, depth) {
-        var fontSize = isRoot ? 18 : 14;
-        var fontWeight = isRoot ? 'bold' : 'normal';
-        var verticalPadding = isRoot ? 20 : 10;
-        var horizontalPadding = isRoot ? 20 : 10;
-        if (depth >= 4) {
-            horizontalPadding = 0;
-            // TODO padding is not taken into account properly when rendering, have to unite layout and rendering
-        }
-
-        // Create temporary element to measure text
-        var temp = document.createElement('div');
-        temp.style.position = 'absolute';
-        temp.style.visibility = 'hidden';
-        temp.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
-        temp.style.fontSize = fontSize + 'px';
-        temp.style.fontWeight = fontWeight;
-        temp.style.whiteSpace = 'nowrap';
-        temp.textContent = text;
-
-        document.body.appendChild(temp);
-        var width = temp.offsetWidth + (horizontalPadding * 2);
-        var height = temp.offsetHeight + (verticalPadding * 2);
-        document.body.removeChild(temp);
-
-        return {
-            width: Math.max(width, 0),
-            height: Math.max(height, 0)
-        };
-    }
-
-    // Apply horizontal layout
-    function layoutHorizontal(node, x, y) {
-        var nodeSize = getNodeSize(node.text, node.level === 1, 'horizontal', node.level);
-        node.x = x;
-        node.y = y - (nodeSize.height / 2);
-        node.width = nodeSize.width;
-        node.height = nodeSize.height;
-
-        if (node.children.length === 0) {
-            return {
-                width: nodeSize.width,
-                height: nodeSize.height
-            };
-        }
-
-        var childX = x + nodeSize.width + 80;
-        var totalHeight = 0;
-        var maxChildWidth = 0;
-
-        var childPadding = 20
-
-        // Position children
-        for (var i = 0; i < node.children.length; i++) {
-            var child = node.children[i];
-            var childSize = layoutHorizontal(child, childX, y + totalHeight);
-
-            totalHeight += childSize.height + childPadding;
-            maxChildWidth = Math.max(maxChildWidth, childSize.width);
-        }
-
-        // Center parent vertically
-        node.y = y - (nodeSize.height / 2) + ((totalHeight - childPadding - nodeSize.height) / 2);
-
-        return {
-            width: nodeSize.width + 80 + maxChildWidth,
-            height: Math.max(nodeSize.height, totalHeight - childPadding)
-        };
-    }
-
-    // Apply vertical layout
-    function layoutVertical(node, x, y) {
-        var nodeSize = getNodeSize(node.text, node.level === 1, 'vertical', node.level);
-        // the entire branch left top corner is (x, y)
-        // initially place the parent at this position
-        node.x = x;
-        node.y = y;
-        node.width = nodeSize.width;
-        node.height = nodeSize.height;
-
-        if (node.children.length === 0) {
-            return {
-                width: nodeSize.width,
-                height: nodeSize.height
-            };
-        }
-
-        var parentPadding = 30;
-
-        var childY = y + nodeSize.height + parentPadding;
-        var totalWidth = 0;
-        var maxChildHeight = 0;
-
-        var childPadding = 30;
-
-        // Position children
-        for (var i = 0; i < node.children.length; i++) {
-            var child = node.children[i];
-            var childSize = layoutVertical(child, x + totalWidth, childY);
-
-            totalWidth += childSize.width + childPadding;
-            maxChildHeight = Math.max(maxChildHeight, childSize.height);
-        }
-        totalWidth -= childPadding;
-
-        // Depending on total size of children and the size of parent, adjust them relatively to x
-        parentShift = Math.max(totalWidth, nodeSize.width)/2 - nodeSize.width / 2;
-        if (totalWidth < nodeSize.width) {
-            parentShift = 0;
-            childShift = (nodeSize.width - totalWidth) / 2;
-        } else {
-            parentShift = (totalWidth - nodeSize.width) / 2;
-            childShift = 0;
-        }
-        node.x = x + parentShift;
-        for (var i = 0; i < node.children.length; i++) {
-            adjustPositionRecursive(node.children[i], childShift, 0);
-        }
-
-        return {
-            width: Math.max(nodeSize.width, totalWidth),
-            height: nodeSize.height + parentPadding + maxChildHeight
-        };
-    }
-
-    function adjustPositionRecursive(node, deltaX, deltaY) {
-        node.x += deltaX;
-        node.y += deltaY;
-        for (var i = 0; i < node.children.length; i++) {
-            adjustPositionRecursive(node.children[i], deltaX, deltaY);
-        }
-    }
-
-    // Apply layout based on selected type
-    function applyLayout(rootNode, isVertical) {
-        if (isVertical) {
-            return layoutVertical(rootNode, 0, 0);
-        } else {
-            return layoutHorizontal(rootNode, 0, 0);
-        }
-    }
-
     // Generate mindmap from markdown
     function generateMindMap() {
         loadingIndicator.textContent = 'Generating mindmap...';
@@ -470,13 +330,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            // Apply layout
-            var isVertical = layoutType.value === 'vertical';
-            applyLayout(rootNode, isVertical);
+            const mindmapStyle = new Style();
+            mindmapStyle.setGlobalLayoutType(layoutType.value);
+            // Apply layout with style
+            const layout = mindmapStyle.getLevelStyle(1).getLayout();
+            layout.applyLayout(rootNode, 0, 0, mindmapStyle);
+
+            if (layoutType.value === 'vertical') {
+                isVertical = true;
+            } else {
+                isVertical = false;
+            }
+
 
             // Render mindmap
             var theme = colorThemes[themeSelector.value];
             var svg = renderMindmap(rootNode, theme, isVertical);
+            // TODO move remaining layout related responsibilities from Renderer to Layout
 
             // Display mindmap
             mindmapContainer.innerHTML = svg;
