@@ -3,14 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obsidian MindMap Exporter</title>
+    <title>Markdown MindMap Exporter</title>
     <link rel="stylesheet" type="text/css" href="style.css">
 </head>
 <body>
     <div class="sidebar">
         <h1>Markdown MindMap Exporter</h1>
-        <ul><small>Convert your Markdown (e.g. edited in Obsidian, with Enhancing Mindmap plugin, or elsewhere)
-            with headings and bullet points to a mindmap!</small></ul>
+        <a href="https://github.com/tigra/mindmap-exporter">https://github.com/tigra/mindmap-exporter</a>
+        <ul><a href="https://tigra.github.io/simple-mindmap-exporter.html"><small>Convert your Markdown
+            (e.g. edited in Obsidian, with Enhancing Mindmap plugin, or elsewhere)
+            with headings and bullet points to a mindmap!</small></a></ul>
         <div>
             <label for="markdown-input">Paste Your MindMap Markdown:</label>
             <textarea id="markdown-input" placeholder="# Root Topic&#10;## Subtopic 1&#10;### Detail 1.1&#10;## Subtopic 2"></textarea>
@@ -20,12 +22,18 @@
         <div class="settings-section">
             <h3>Appearance</h3>
             <div class="form-group">
-                <label for="theme-selector">Color Theme:</label>
-                <select id="theme-selector">
+                <label for="style-preset">Style Preset:</label>
+                <select id="style-preset">
                     <option value="default">Default Purple</option>
-                    <option value="ocean">Ocean Blue</option>
-                    <option value="forest">Forest Green</option>
-                    <option value="sunset">Sunset Orange</option>
+                    <option value="corporate">Corporate Blue</option>
+                    <option value="vibrant">Vibrant Colors</option>
+                    <option value="pastel">Soft Pastel</option>
+                    <option value="monochrome">Monochrome</option>
+                    <option value="nature">Nature Green</option>
+                    <option value="tech">Tech Dark</option>
+                    <option value="retro">Retro Pixel</option>
+                    <option value="minimal">Minimal Clean</option>
+                    <option value="creative">Creative Round</option>
                 </select>
             </div>
 
@@ -77,6 +85,7 @@
         </div>
     </div>
 
+    <script src="style-presets.js"></script>
     <script src="renderer.js"></script>
     <script src="mindmap.js"></script>
     <script src="layout.js"></script>
