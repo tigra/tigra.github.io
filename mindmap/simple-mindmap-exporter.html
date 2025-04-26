@@ -40,19 +40,9 @@
             <div class="form-group">
                 <label for="layout-type">Layout Style:</label>
                 <select id="layout-type">
-                    <option value="horizontal">Horizontal</option>
+                    <option value="horizontal-right">Horizontal (Right)</option>
+                    <option value="horizontal-left">Horizontal (Left)</option>
                     <option value="vertical">Vertical</option>
-                </select>
-            </div>
-        </div>
-
-        <div class="settings-section">
-            <h3>Export Settings</h3>
-            <div class="form-group">
-                <label for="export-format">Export Format:</label>
-                <select id="export-format">
-                    <option value="svg">SVG Vector</option>
-                    <option value="png">PNG Image</option>
                 </select>
             </div>
         </div>
@@ -80,14 +70,38 @@
             </div>
         </div>
 
-        <div class="controls">
-            <button id="export-btn" disabled>Export</button>
+        <div class="export-controls">
+            <div class="export-format">
+                <label for="export-format">Export Format:</label>
+                <select id="export-format">
+                    <option value="svg" selected>SVG Vector</option>
+                    <option value="png">PNG Image</option>
+                </select>
+                <button id="export-btn">Export</button>
+            </div>
         </div>
     </div>
 
-    <script src="style-presets.js"></script>
-    <script src="renderer.js"></script>
-    <script src="mindmap.js"></script>
-    <script src="layout.js"></script>
+    <script type="module" src="model/node.js"></script>
+    <script type="module" src="model/mindmap-model.js"></script>
+
+    <script type="module" src="./layout/connection-point.js"></script>
+    <script type="module" src="./layout/layout.js"></script>
+    <script type="module" src="./layout/horizontal-layout.js"></script>
+    <script type="module" src="./layout/vertical-layout.js"></script>
+    <script type="module" src="./layout/layout-factory.js"></script>
+
+    <script type="module" src="style/style-configuration.js"></script>
+    <script type="module" src="style/style-manager.js"></script>
+    <script type="module" src="./style/style-presets.js"></script>
+
+    <script type="module" src="./utils/event-bridge.js"></script>
+    <script type="module" src="./renderer/mindmap-renderer.js"></script>
+    <script type="module" src="./controller/mindmap-controller.js"></script>
+    <script type="module" src="./app.js"></script>
+
+    <script type="module" src="model/integration.js"></script>
+
+    <script type="module" src="utils/text-metrics.js"></script>
 </body>
 </html>

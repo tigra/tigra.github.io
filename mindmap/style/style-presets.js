@@ -29,8 +29,11 @@ class MindmapStylePresets {
      * @return {Style} The configured style object
      */
     static applyPreset(presetName, style) {
+        console.log('applyPreset(', presetName);
+        console.log('style', style);
         const presets = MindmapStylePresets.getPresets();
         if (presets[presetName]) {
+            console.log("found");
             return presets[presetName](style);
         }
         // Default to the default style if preset not found
@@ -558,7 +561,7 @@ class MindmapStylePresets {
                     borderColor: '#fdd835',
                     borderRadius: 25,
                     nodeType: 'box',
-                    connectionColor: '#fff176'
+                    connectionColor: '#d0d075'
                 },
                 4: {
                     fontSize: 12,
@@ -577,3 +580,5 @@ class MindmapStylePresets {
         return style;
     }
 }
+
+export default MindmapStylePresets;
