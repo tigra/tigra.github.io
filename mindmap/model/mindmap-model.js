@@ -60,8 +60,9 @@ class MindmapModel {
         continue; // Skip lines that aren't headings or bullet points
       }
 
-      // Create node
-      const node = new Node(text, level);
+      // Create node and auto-collapse if level >= 4
+      const collapsed = level >= 4;
+      const node = new Node(text, level, collapsed);
 
       // Find the parent node
       while (stack.length > 1 && stack[stack.length - 1].level >= level) {
@@ -97,6 +98,20 @@ class MindmapModel {
    */
   findNodeById(id) {
     return this.nodeMap.get(id) || null;
+  }
+  
+  /**
+   * Find a node by its text content (first match)
+   * @param {string} text - The text content to search for
+   * @return {Node|null} The node, or null if not found
+   */
+  findNodeByText(text) {
+    for (const node of this.nodeMap.values()) {
+      if (node.text === text) {
+        return node;
+      }
+    }
+    return null;
   }
 
   /**

@@ -161,6 +161,28 @@ class MindmapRenderer {
     return this._drawNodeRecursive(this.model.getRoot());
   }
 
+  _drawParentDropZone(node, parentChildPadding) {
+    return `<rect x="${node.boundingBox.x}" y="${node.boundingBox.y - parentChildPadding/2}"
+     width="${node.width}" height="${node.boundingBox.height / 2 + parentChildPadding / 2}" fill="#500000"
+     stroke="#450000"
+     fill-opacity="0.1" class="node-shape" /> `  +
+     `<rect x="${node.boundingBox.x}" y="${node.boundingBox.y + node.boundingBox.height / 2}"
+     width="${node.width}" height="${node.boundingBox.height / 2  + parentChildPadding / 2}" fill="#000060"
+     stroke="#000045"
+     fill-opacity="0.1" class="node-shape" />`
+  }
+
+  _drawChildDropZone(node, layout, parentChildPadding) {
+    var additionalSpan = 0;
+    if (!node.hasChildren()) {
+        additionalSpan = 300;
+    }
+    return `<rect x="${node.boundingBox.x+node.width}" y="${node.boundingBox.y - parentChildPadding / 2}"
+     width="${layout.parentPadding + additionalSpan}" height="${node.boundingBox.height + parentChildPadding}" fill="#005000"
+     fill-opacity="0.1" stroke="#004000" class="node-shape"
+     />`
+  }
+
   /**
    * Recursively draw a node and its children
    * @private
@@ -170,8 +192,12 @@ class MindmapRenderer {
   _drawNodeRecursive(node) {
     let svg = '';
     const levelStyle = this.styleManager.getLevelStyle(node.level);
+    const parentChildPadding = node.level > 1 ? this.styleManager.getLevelStyle(node.level - 1).childPadding : 0;
+    const layout = levelStyle.getLayout();
     // TODO configure / style these thingies:
 //    svg += `<circle r="5" cx="${node.x}" cy="${node.y}" fill="red" />`
+//    svg += this._drawParentDropZone(node, parentChildPadding ? parentChildPadding : 0);
+//    svg += this._drawChildDropZone(node, layout, parentChildPadding);
     if (levelStyle.boundingBox) {
        svg += this._drawBoundingBox(node);
     }
@@ -199,8 +225,56 @@ class MindmapRenderer {
     if (node.hasChildren()) {
       svg += this._drawCollapseIndicator(node);
     }
+    
+    // Draw any debug elements attached to the node
+    if (node.debugElements && node.debugElements.length > 0) {
+      svg += this._drawDebugElements(node);
+    }
 
     return svg;
+  }
+  
+  /**
+   * Draw debug elements attached to a node
+   * @private
+   * @param {Object} node - The node with debug elements
+   * @return {string} SVG elements for debugging
+   */
+  _drawDebugElements(node) {
+    if (!node.debugElements || node.debugElements.length === 0) {
+      return '';
+    }
+    
+    const debugElements = [];
+    
+    // Generate SVG for each debug element
+    for (const element of node.debugElements) {
+      switch (element.type) {
+        case 'line':
+          debugElements.push(`<line 
+            x1="${element.x1}" 
+            y1="${element.y1}" 
+            x2="${element.x2}" 
+            y2="${element.y2}" 
+            stroke="${element.stroke}" 
+            stroke-width="${element.strokeWidth}" 
+            stroke-dasharray="${element.strokeDasharray}" />`);
+          break;
+          
+        case 'text':
+          debugElements.push(`<text 
+            x="${element.x}" 
+            y="${element.y}" 
+            text-anchor="${element.textAnchor}" 
+            fill="${element.fill}" 
+            font-size="${element.fontSize}">${element.content}</text>`);
+          break;
+          
+        // Add more cases for other element types as needed
+      }
+    }
+    
+    return `<g class="debug-elements" id="${node.id}_debug">${debugElements.join('\n')}</g>`;
   }
 
   /**
@@ -251,14 +325,14 @@ class MindmapRenderer {
 
     _drawBoundingBox(node) {
         if (node.boundingBox) {
-            console.log(node.boundingBox);
+//            console.log(node.boundingBox);
             return `<rect x="${node.boundingBox.x}" y="${node.boundingBox.y}"
                           width="${node.boundingBox.width}" height="${node.boundingBox.height}"
                           rx="2" ry="2" fill="#101010" fill-opacity="0.05"
                           stroke="#001000" stroke-width="1" filter="url(#dropShadow)"
                           id="${node.id}_bbox" class="node-shape" />`;
         } else {
-            console.log('no bounding box!');
+//            console.log('no bounding box!');
             return '';
         }
     }
@@ -356,17 +430,20 @@ class MindmapRenderer {
     }
 
     // Draw different icons based on collapsed state
-    const fillColor = this._darkenColor(this.getFillColor(node), 10);
+    // Use the connection color for the indicator but darker
+    const connectionColor = levelStyle.connectionColor || '#666';
+    const fillColor = this._darkenColor(connectionColor, 20);  // Darken the connection color
+    const borderColor = this._darkenColor(connectionColor, 40);  // Even darker for the border
     let icon;
 
     if (node.collapsed) {
       // Plus icon for collapsed nodes
-      icon = `<circle cx="${indicatorX}" cy="${indicatorY}" r="${radius}" fill="${fillColor}" stroke="#666" stroke-width="1" />
+      icon = `<circle cx="${indicatorX}" cy="${indicatorY}" r="${radius}" fill="${fillColor}" stroke="${borderColor}" stroke-width="1" />
               <line x1="${indicatorX - 3}" y1="${indicatorY}" x2="${indicatorX + 3}" y2="${indicatorY}" stroke="#fff" stroke-width="1.5" />
               <line x1="${indicatorX}" y1="${indicatorY - 3}" x2="${indicatorX}" y2="${indicatorY + 3}" stroke="#fff" stroke-width="1.5" />`;
     } else {
       // Minus icon for expanded nodes
-      icon = `<circle cx="${indicatorX}" cy="${indicatorY}" r="${radius}" fill="${fillColor}" stroke="#666" stroke-width="1" />
+      icon = `<circle cx="${indicatorX}" cy="${indicatorY}" r="${radius}" fill="${fillColor}" stroke="${borderColor}" stroke-width="1" />
               <line x1="${indicatorX - 3}" y1="${indicatorY}" x2="${indicatorX + 3}" y2="${indicatorY}" stroke="#fff" stroke-width="1.5" />`;
     }
 
@@ -452,6 +529,7 @@ class MindmapRenderer {
     this.findBounds();
 
     let svg = this.createSvgContainer();
+//    svg += `<circle r="5" cx="0" cy="0" fill="blue" />`
     svg += this.createDefs();
     svg += this.drawNodes();
     svg += '</svg>';
@@ -477,25 +555,47 @@ class MindmapRenderer {
   /**
    * Attach event handlers to nodes
    */
-  attachEventHandlers() {
-    this.nodeMap.forEach((node, nodeId) => {
-      // Add event listener to node shape
-      const nodeRect = document.getElementById(`${nodeId}_rect`);
-      if (nodeRect) {
-        nodeRect.addEventListener('dblclick', () => {
-          eventBridge.handleNodeEvent(nodeId, 'toggle');
-        });
-      }
+attachEventHandlers() {
+  this.nodeMap.forEach((node, nodeId) => {
+    // Add event listener to node shape
+    const nodeRect = document.getElementById(`${nodeId}_rect`);
+    if (nodeRect) {
+      // Double-click event for toggling collapse state
+      nodeRect.addEventListener('dblclick', () => {
+        eventBridge.handleNodeEvent(nodeId, 'toggle');
+      });
 
-      // Add event listener to collapse/expand indicator
-      const nodeIndicator = document.getElementById(`${nodeId}_indicator`);
-      if (nodeIndicator) {
-        nodeIndicator.addEventListener('click', () => {
-          eventBridge.handleNodeEvent(nodeId, 'toggle');
-        });
-      }
-    });
-  }
+      // Single-click event for debugging node properties
+      nodeRect.addEventListener('click', (event) => {
+        // Prevent event from triggering unwanted behaviors
+        if (!event.ctrlKey) {
+          event.stopPropagation();
+          eventBridge.handleNodeEvent(nodeId, 'debug');
+        }
+      });
+    }
+
+    // Add event listener to text as well for better UX
+    const nodeText = document.getElementById(`${nodeId}_text`);
+    if (nodeText) {
+      nodeText.addEventListener('click', (event) => {
+        // Prevent event from triggering unwanted behaviors
+        if (!event.ctrlKey) {
+          event.stopPropagation();
+          eventBridge.handleNodeEvent(nodeId, 'debug');
+        }
+      });
+    }
+
+    // Add event listener to collapse/expand indicator
+    const nodeIndicator = document.getElementById(`${nodeId}_indicator`);
+    if (nodeIndicator) {
+      nodeIndicator.addEventListener('click', () => {
+        eventBridge.handleNodeEvent(nodeId, 'toggle');
+      });
+    }
+  });
+}
 
   /**
    * Get the node map
