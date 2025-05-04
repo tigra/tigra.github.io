@@ -64,73 +64,10 @@ class Layout {
    * Get the connection point for a parent node connecting to its children
    * @param {Node} node - The parent node
    * @param {Object} levelStyle - The style for this node's level
-   * @param {Node} childNode - The specific child node being connected to (optional)
    * @return {ConnectionPoint} The connection point
    */
-  getParentConnectionPoint(node, levelStyle, childNode = null) {
+  getParentConnectionPoint(node, levelStyle) {
     throw new Error('Method getParentConnectionPoint must be implemented by subclasses');
-  }
-  
-  /**
-   * Calculate horizontal position for parent connection points when distributed
-   * @param {Node} node - The parent node
-   * @param {Node} childNode - The child node
-   * @param {string} connectionPointsType - Type of distribution ('single', 'distributedRelativeToParentSize', 'distributeEvenly')
-   * @param {number} widthPortion - Portion of parent width to use for connections (0.0-1.0), default 0.8
-   * @returns {number} The x-coordinate for the connection point
-   */
-  calculateConnectionPointX(node, childNode, connectionPointsType, widthPortion = 0.8) {
-    // Default to center position
-    if (!childNode || connectionPointsType === 'single') {
-      return node.x + (node.width / 2);
-    }
-    
-    // Calculate margins - evenly distribute remaining width to both sides
-    const marginPortion = (1 - widthPortion) / 2;
-    const parentWidth = node.width;
-    
-    // Handle specific distribution types
-    if (connectionPointsType === 'distributedRelativeToParentSize') {
-      // Position based on child's horizontal center
-      const childCenterX = childNode.x + (childNode.width / 2);
-      
-      // Calculate relative position with configured margins
-      let relativePosition = (childCenterX - node.x) / parentWidth;
-      // Constrain within the usable range
-      relativePosition = Math.max(marginPortion, Math.min(1 - marginPortion, relativePosition));
-      
-      return node.x + (parentWidth * relativePosition);
-    }
-    
-    if (connectionPointsType === 'distributeEvenly') {
-      // Position based on child's index among siblings
-      const children = node.children;
-      
-      // Return center if no children or child not found
-      if (!children || children.length === 0) {
-        return node.x + (node.width / 2);
-      }
-      
-      const childIndex = children.findIndex(child => child === childNode);
-      if (childIndex === -1) {
-        return node.x + (node.width / 2);
-      }
-      
-      // Calculate evenly spaced positions
-      const usableWidth = parentWidth * widthPortion;  // Configurable portion of width
-      const startX = node.x + (parentWidth * marginPortion);  // Left margin
-      
-      // For one child, use center; otherwise space evenly
-      if (children.length === 1) {
-        return startX + (usableWidth / 2);
-      } else {
-        const gap = usableWidth / (children.length - 1);
-        return startX + (gap * childIndex);
-      }
-    }
-    
-    // Default fallback to center
-    return node.x + (node.width / 2);
   }
 
   /**
