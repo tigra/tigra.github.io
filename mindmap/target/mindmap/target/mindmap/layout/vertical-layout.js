@@ -151,30 +151,20 @@ class VerticalLayout extends Layout {
    * Get the connection point for a parent node in vertical layout
    * @param {Node} node - The parent node
    * @param {Object} levelStyle - The style for this node's level
-   * @param {Node} childNode - The specific child node being connected to (optional)
    * @return {ConnectionPoint} The connection point
    */
-  getParentConnectionPoint(node, levelStyle, childNode = null) {
+  getParentConnectionPoint(node, levelStyle) {
     // Get direction from StyleManager with fallback to default
     const effectiveDirection = levelStyle.styleManager.getEffectiveValue(node, 'direction') || this.direction;
-    
-    // Determine Y position based on direction
-    const y = effectiveDirection === 'down' ? node.y + node.height : node.y;
-    const side = effectiveDirection === 'down' ? 'bottom' : 'top';
-    
-    // Get connection points type from style with fallback to 'single'
-    const connectionPointsType = levelStyle.styleManager.getEffectiveValue(node, 'parentConnectionPoints') || 'single';
-    
-    // Get the configurable width portion or use default (0.8)
-    const widthPortion = levelStyle.styleManager ? 
-      levelStyle.styleManager.getEffectiveValue(node, 'parentWidthPortionForConnectionPoints') || 0.8 : 
-      0.8;
-    
-    // Calculate X position based on distribution type
-    const x = this.calculateConnectionPointX(node, childNode, connectionPointsType, widthPortion);
-    
-    // Return connection point
-    return new ConnectionPoint(x, y, side);
+
+    // In vertical layout, parent connects from its bottom or top depending on direction
+    const x = node.x + node.width / 2;
+
+    if (effectiveDirection === 'down') {
+      return new ConnectionPoint(x, node.y + node.height, 'bottom');
+    } else {
+      return new ConnectionPoint(x, node.y, 'top');
+    }
   }
 
   /**
