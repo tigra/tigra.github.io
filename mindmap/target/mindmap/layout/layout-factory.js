@@ -3,7 +3,6 @@
 import HorizontalLayout from './horizontal-layout.js';
 import VerticalLayout from './vertical-layout.js';
 import TaprootLayout from './taproot-layout.js';
-import ClassicMindmapLayout from './classic-mindmap-layout.js';
 
 /**
  * Factory for creating appropriate layouts
@@ -11,7 +10,7 @@ import ClassicMindmapLayout from './classic-mindmap-layout.js';
 class LayoutFactory {
   /**
    * Create a layout based on type and parameters
-   * @param {string} type - The layout type ('horizontal', 'vertical', 'taproot', or 'classic')
+   * @param {string} type - The layout type ('horizontal', 'vertical', or 'taproot')
    * @param {number} parentPadding - Padding between parent and children
    * @param {number} childPadding - Padding between siblings
    * @param {string} direction - Direction of layout ('right', 'left', 'down', or 'up')
@@ -26,9 +25,6 @@ class LayoutFactory {
     switch (type) {
       case 'taproot':
         return new TaprootLayout(parentPadding, childPadding);
-        
-      case 'classic':
-        return new ClassicMindmapLayout(parentPadding, childPadding);
 
       case 'vertical':
         // Default direction for vertical layout is 'down'
