@@ -104,10 +104,30 @@ class MindmapRenderer {
         defs += this._createGradient(`level${i}Gradient`, lightColor, darkColor);
         gradients.push(i);
       }
+      
+      // Create connection gradients if tapered connections are enabled
+      if (levelStyle && levelStyle.connectionTapered && levelStyle.connectionGradient && levelStyle.connectionColor) {
+        const baseColor = levelStyle.connectionColor;
+        const lightColor = this._lightenColor(baseColor, 20);
+        const darkColor = this._darkenColor(baseColor, 10);
+        
+        defs += this._createGradient(`level${i}ConnectionGradient`, lightColor, darkColor);
+      }
     }
 
     // Store the gradients for use in node rendering
     this.gradients = gradients;
+    
+    // Add specific connection gradients if needed
+    if (this.connectionGradients && this.connectionGradients.size > 0) {
+      for (const gradientInfo of this.connectionGradients) {
+        const baseColor = gradientInfo.color;
+        const lightColor = this._lightenColor(baseColor, 20);
+        const darkColor = this._darkenColor(baseColor, 10);
+        
+        defs += this._createGradient(gradientInfo.id, lightColor, darkColor);
+      }
+    }
 
     // Drop shadow filter
     defs += `<filter id="dropShadow">
@@ -278,6 +298,144 @@ class MindmapRenderer {
   }
 
   /**
+   * Calculate Bezier control points for a connection
+   * @private
+   * @param {ConnectionPoint} startPoint - The starting connection point
+   * @param {ConnectionPoint} endPoint - The ending connection point
+   * @return {Array} Array of [cp1x, cp1y, cp2x, cp2y] control points
+   */
+  _calculateBezierControlPoints(startPoint, endPoint) {
+    // Check if it's a vertical or horizontal connection
+    const isVerticalLayout = startPoint.direction === 'bottom' || startPoint.direction === 'top';
+
+    if (isVerticalLayout) {
+      // For vertical layout, create a curve that bends vertically
+      const dy = endPoint.y - startPoint.y;
+      return [
+        startPoint.x, startPoint.y + dy * 0.4,
+        endPoint.x, startPoint.y + dy * 0.6
+      ];
+    } else {
+      // For horizontal layout, create a curve that bends horizontally
+      const dx = endPoint.x - startPoint.x;
+      return [
+        startPoint.x + dx * 0.4, startPoint.y,
+        startPoint.x + dx * 0.6, endPoint.y
+      ];
+    }
+  }
+
+  /**
+   * Calculate perpendicular offset points based on connection point direction
+   * @private
+   * @param {ConnectionPoint} point - The connection point
+   * @param {number} width - The width to offset (half on each side)
+   * @return {Array} Array of [topX, topY, bottomX, bottomY] for the offset points
+   */
+  _calculatePerpendicularOffsets(point, width) {
+    // Calculate offset based on the connection point direction
+    // Always return points in a consistent order: first point is always the "top/left" offset
+    // and second point is always the "bottom/right" offset, regardless of direction
+    
+    switch (point.direction) {
+      case 'top':
+        // Offset horizontally for top-pointing connection
+        return [
+          point.x - width/2, point.y,  // left point
+          point.x + width/2, point.y   // right point
+        ];
+      case 'bottom':
+        // Offset horizontally for bottom-pointing connection (same as top)
+        return [
+          point.x - width/2, point.y,  // left point
+          point.x + width/2, point.y   // right point
+        ];
+      case 'left':
+        // Offset vertically for left-pointing connection
+        return [
+          point.x, point.y - width/2,  // top point
+          point.x, point.y + width/2   // bottom point
+        ];
+      case 'right':
+        // Offset vertically for right-pointing connection (same as left)
+        return [
+          point.x, point.y - width/2,  // top point
+          point.x, point.y + width/2   // bottom point
+        ];
+      default:
+        // Default to horizontal offset if direction is unknown
+        return [
+          point.x - width/2, point.y,
+          point.x + width/2, point.y
+        ];
+    }
+  }
+
+  /**
+   * Draw a tapered connection between parent and child nodes
+   * @private
+   * @param {Object} parent - The parent node
+   * @param {Object} child - The child node
+   * @param {Object} parentStyle - The parent node's style
+   * @param {Object} childStyle - The child node's style
+   * @param {ConnectionPoint} startPoint - The starting connection point
+   * @param {ConnectionPoint} endPoint - The ending connection point
+   * @return {string} SVG path element for the tapered connection
+   */
+  _drawTaperedConnection(parent, child, parentStyle, childStyle, startPoint, endPoint) {
+    // Get connection widths from style
+    const startWidth = parentStyle.connectionStartWidth || 8;
+    const endWidth = parentStyle.connectionEndWidth || 2;
+    
+    // Calculate control points for the centerline curve
+    const [cp1x, cp1y, cp2x, cp2y] = this._calculateBezierControlPoints(startPoint, endPoint);
+    
+    // Calculate perpendicular offsets at start and end points
+    // Now these are consistently ordered: [leftX, leftY, rightX, rightY] or [topX, topY, bottomX, bottomY]
+    const [startLeftX, startLeftY, startRightX, startRightY] = 
+      this._calculatePerpendicularOffsets(startPoint, startWidth);
+    
+    const [endLeftX, endLeftY, endRightX, endRightY] = 
+      this._calculatePerpendicularOffsets(endPoint, endWidth);
+    
+    // Create the filled path - always going clockwise
+    const path = `M ${startLeftX} ${startLeftY}
+                   C ${cp1x + (startLeftX - startPoint.x)} ${cp1y + (startLeftY - startPoint.y)},
+                     ${cp2x + (endLeftX - endPoint.x)} ${cp2y + (endLeftY - endPoint.y)},
+                     ${endLeftX} ${endLeftY}
+                   L ${endRightX} ${endRightY}
+                   C ${cp2x + (endRightX - endPoint.x)} ${cp2y + (endRightY - endPoint.y)},
+                     ${cp1x + (startRightX - startPoint.x)} ${cp1y + (startRightY - startPoint.y)},
+                     ${startRightX} ${startRightY}
+                   Z`;
+    
+    // Get connection color from style
+    const connectionColor = parentStyle.connectionColor || '#666';
+    
+    // Check if gradient should be used
+    let fill = connectionColor;
+    if (parentStyle.connectionGradient) {
+      const gradientId = `gradient_${parent.id}_${child.id}`;
+      // Create a gradient in the defs section if it doesn't exist
+      if (!this.connectionGradients) {
+        this.connectionGradients = new Set();
+      }
+      
+      // Add this gradient to the set to be created in createDefs
+      this.connectionGradients.add({
+        id: gradientId,
+        color: connectionColor,
+        parent: parent,
+        child: child
+      });
+      
+      fill = `url(#${gradientId})`;
+    }
+    
+    return `<path d="${path}" fill="${fill}" />`;
+  }
+
+  /**
    * Draw a connection between parent and child nodes
    * @private
    * @param {Object} parent - The parent node
@@ -295,27 +453,22 @@ class MindmapRenderer {
     const startPoint = parentLayout.getParentConnectionPoint(parent, parentStyle, child);
     const endPoint = childLayout.getChildConnectionPoint(child, childStyle);
 
-    // Determine the curve control points based on connection directions
-    let path = '';
-
-    // Check if it's a vertical or horizontal connection
-    const isVerticalLayout = startPoint.direction === 'bottom' || startPoint.direction === 'top';
-
-    if (isVerticalLayout) {
-      // For vertical layout, create a curve that bends vertically
-      const dy = endPoint.y - startPoint.y;
-      path = `M ${startPoint.x} ${startPoint.y}
-               C ${startPoint.x} ${startPoint.y + dy * 0.4},
-                 ${endPoint.x} ${startPoint.y + dy * 0.6},
-                 ${endPoint.x} ${endPoint.y}`;
-    } else {
-      // For horizontal layout, create a curve that bends horizontally
-      const dx = endPoint.x - startPoint.x;
-      path = `M ${startPoint.x} ${startPoint.y}
-               C ${startPoint.x + dx * 0.4} ${startPoint.y},
-                 ${startPoint.x + dx * 0.6} ${endPoint.y},
-                 ${endPoint.x} ${endPoint.y}`;
+    // Check if tapered connections are enabled
+    const useTapered = parentStyle.connectionTapered || false;
+    
+    if (useTapered) {
+      return this._drawTaperedConnection(parent, child, parentStyle, childStyle, startPoint, endPoint);
     }
+
+    // If not using tapered, proceed with the original stroke-based connection
+    // Calculate the Bezier curve control points
+    const [cp1x, cp1y, cp2x, cp2y] = this._calculateBezierControlPoints(startPoint, endPoint);
+    
+    // Create the path with the calculated control points
+    const path = `M ${startPoint.x} ${startPoint.y}
+                   C ${cp1x} ${cp1y},
+                     ${cp2x} ${cp2y},
+                     ${endPoint.x} ${endPoint.y}`;
 
     // Get connection color from style
     const connectionColor = parentStyle.connectionColor || '#666';
