@@ -200,6 +200,7 @@ debugNodeProperties(nodeId) {
   const properties = [
     'layoutType',
     'direction',
+    'parentConnectionPoints',
     'fontSize',
     'fontWeight',
     'fontFamily',
@@ -286,8 +287,17 @@ logPropertyInheritanceChain(node, property) {
       // Configure style system
       this.styleManager.configure({
         levelStyles: {
-          1: { layoutType: 'vertical', direction: 'down' },
-          2: { layoutType: 'taproot' },
+          1: { 
+            layoutType: 'vertical', 
+            direction: 'down', 
+            parentConnectionPoints: 'distributeEvenly',
+            parentWidthPortionForConnectionPoints: 0.75
+          },
+          2: { 
+            layoutType: 'taproot',
+            parentConnectionPoints: 'distributeEvenly',
+            parentWidthPortionForConnectionPoints: 0.4
+          },
           3: { layoutType: 'horizontal' },
           4: { layoutType: 'horizontal' },
           default: { layoutType: 'horizontal' }
@@ -298,12 +308,29 @@ logPropertyInheritanceChain(node, property) {
       if (rootNode) {
         rootNode.setOverride('layoutType', 'vertical');
         rootNode.setOverride('direction', 'down');
+        rootNode.setOverride('parentConnectionPoints', 'distributeEvenly');
+        rootNode.setOverride('parentWidthPortionForConnectionPoints', 0.75);
       }
     } else if (layoutType === 'taproot') {
       // Configure style system
       this.styleManager.configure({
         levelStyles: {
-          1: { layoutType: 'taproot' },
+          1: { 
+            layoutType: 'taproot', 
+            parentConnectionPoints: 'distributeEvenly',
+            parentWidthPortionForConnectionPoints: 0.4 
+          },
+          2: { layoutType: 'horizontal', direction: null },
+          3: { layoutType: 'horizontal', direction: null },
+          4: { layoutType: 'horizontal', direction: null },
+          default: { layoutType: 'horizontal' }
+        }
+      });
+    } else if (layoutType === 'classic') {
+      // Configure style system for classic mindmap layout
+      this.styleManager.configure({
+        levelStyles: {
+          1: { layoutType: 'classic', childPadding: 60 },
           2: { layoutType: 'horizontal', direction: null },
           3: { layoutType: 'horizontal', direction: null },
           4: { layoutType: 'horizontal', direction: null },
@@ -330,11 +357,11 @@ logPropertyInheritanceChain(node, property) {
       // Configure style system
       this.styleManager.configure({
         levelStyles: {
-          1: { layoutType: 'vertical', direction: 'up' },
-          2: { layoutType: 'vertical', direction: 'up' },
-          3: { layoutType: 'vertical', direction: 'up' },
-          4: { layoutType: 'vertical', direction: 'up' },
-          default: { layoutType: 'vertical', direction: 'up' }
+          1: { layoutType: 'vertical', direction: 'up', parentConnectionPoints: 'distributeEvenly', parentWidthPortionForConnectionPoints: 0.75 },
+          2: { layoutType: 'vertical', direction: 'up', parentConnectionPoints: 'distributeEvenly', parentWidthPortionForConnectionPoints: 0.75 },
+          3: { layoutType: 'vertical', direction: 'up', parentConnectionPoints: 'distributeEvenly', parentWidthPortionForConnectionPoints: 0.75 },
+          4: { layoutType: 'vertical', direction: 'up', parentConnectionPoints: 'distributeEvenly', parentWidthPortionForConnectionPoints: 0.75 },
+          default: { layoutType: 'vertical', direction: 'up', parentConnectionPoints: 'distributeEvenly', parentWidthPortionForConnectionPoints: 0.75 }
         }
       });
       
@@ -342,16 +369,18 @@ logPropertyInheritanceChain(node, property) {
       if (rootNode) {
         rootNode.setOverride('layoutType', 'vertical');
         rootNode.setOverride('direction', 'up');
+        rootNode.setOverride('parentConnectionPoints', 'distributeEvenly');
+        rootNode.setOverride('parentWidthPortionForConnectionPoints', 0.75);
       }
     } else if (layoutType === 'vertical' || layoutType === 'vertical-down') {
       // Configure style system
       this.styleManager.configure({
         levelStyles: {
-          1: { layoutType: 'vertical', direction: 'down' },
-          2: { layoutType: 'vertical', direction: 'down' },
-          3: { layoutType: 'vertical', direction: 'down' },
-          4: { layoutType: 'vertical', direction: 'down' },
-          default: { layoutType: 'vertical', direction: 'down' }
+          1: { layoutType: 'vertical', direction: 'down', parentConnectionPoints: 'distributeEvenly', parentWidthPortionForConnectionPoints: 0.75 },
+          2: { layoutType: 'vertical', direction: 'down', parentConnectionPoints: 'distributeEvenly', parentWidthPortionForConnectionPoints: 0.75 },
+          3: { layoutType: 'vertical', direction: 'down', parentConnectionPoints: 'distributeEvenly', parentWidthPortionForConnectionPoints: 0.75 },
+          4: { layoutType: 'vertical', direction: 'down', parentConnectionPoints: 'distributeEvenly', parentWidthPortionForConnectionPoints: 0.75 },
+          default: { layoutType: 'vertical', direction: 'down', parentConnectionPoints: 'distributeEvenly', parentWidthPortionForConnectionPoints: 0.75 }
         }
       });
       
@@ -359,6 +388,8 @@ logPropertyInheritanceChain(node, property) {
       if (rootNode) {
         rootNode.setOverride('layoutType', 'vertical');
         rootNode.setOverride('direction', 'down');
+        rootNode.setOverride('parentConnectionPoints', 'distributeEvenly');
+        rootNode.setOverride('parentWidthPortionForConnectionPoints', 0.75);
       }
     } else {
       // Default case - use whatever layout type was provided
