@@ -6,6 +6,22 @@ import eventBridge from '../utils/event-bridge.js';
  * MindmapRenderer class for SVG generation with interactive expand/collapse
  */
 class MindmapRenderer {
+  // Class constants
+  static DEFAULT_PADDING = 100;
+  static DEFAULT_BORDER_RADIUS = 5;
+  static DEFAULT_BORDER_WIDTH = 1.5;
+  static DEFAULT_FILL_OPACITY = 0.5;
+  static DEFAULT_CONNECTION_COLOR = '#666';
+  static DEFAULT_CONNECTION_WIDTH = 2;
+  static DEFAULT_FONT_SIZE = 14;
+  static DEFAULT_FONT_WEIGHT = 'normal';
+  static DEFAULT_FONT_FAMILY = 'Arial, sans-serif';
+  static DEFAULT_TEXT_COLOR_BOXED = 'white';
+  static DEFAULT_TEXT_COLOR_PLAIN = '#333';
+  static LIGHTEN_PERCENT = 30;
+  static DARKEN_PERCENT = 10;
+  static INDICATOR_RADIUS = 6;
+  
   /**
    * Create a new MindmapRenderer
    * @param {Object} model - The mindmap model
@@ -18,19 +34,26 @@ class MindmapRenderer {
     this.minY = Infinity;
     this.maxX = -Infinity;
     this.maxY = -Infinity;
-    this.padding = 100;
+    this.padding = MindmapRenderer.DEFAULT_PADDING;
     this.nodeMap = new Map(); // Store references to nodes by id
+  }
+
+  /**
+   * Reset bounds to initial values
+   * @private
+   */
+  _resetBounds() {
+    this.minX = Infinity;
+    this.minY = Infinity;
+    this.maxX = -Infinity;
+    this.maxY = -Infinity;
   }
 
   /**
    * Find the bounds of the entire mindmap
    */
   findBounds() {
-    this.minX = Infinity;
-    this.minY = Infinity;
-    this.maxX = -Infinity;
-    this.maxY = -Infinity;
-
+    this._resetBounds();
     this._findBoundsRecursive(this.model.getRoot());
 
     // Add padding
@@ -77,68 +100,173 @@ class MindmapRenderer {
   }
 
   /**
-   * Create gradient and filter definitions
-   * @return {string} SVG defs element with gradients and filters
+   * Create a color gradient from a base color
+   * @private
+   * @param {string} id - The gradient ID
+   * @param {string} baseColor - The base color to create gradient from
+   * @param {number} lightenAmount - Amount to lighten (percent)
+   * @param {number} darkenAmount - Amount to darken (percent)
+   * @return {string} SVG gradient definition
    */
-  createDefs() {
-    let defs = '<defs>';
+  _createColorGradientFromBase(id, baseColor, lightenAmount, darkenAmount) {
+    // Skip if the color is already a gradient or special format
+    if (baseColor.startsWith('url') || baseColor.startsWith('linear-gradient')) {
+      return '';
+    }
+    
+    const lightColor = this._lightenColor(baseColor, lightenAmount);
+    const darkColor = this._darkenColor(baseColor, darkenAmount);
+    
+    return this._createGradient(id, lightColor, darkColor);
+  }
 
-    // Create gradients for different levels
+  /**
+   * Create color gradients for node backgrounds and connections
+   * @private
+   * @return {object} Object containing gradients definition string and list of created level gradients
+   */
+  _createColorGradients() {
+    let gradientsString = '';
     const gradients = [];
     const levelCount = 6; // Maximum number of distinct level styles to create gradients for
 
     for (let i = 1; i <= levelCount; i++) {
       const levelStyle = this.styleManager.getLevelStyle(i);
+      
+      // Create node background gradient if possible
       if (levelStyle && levelStyle.backgroundColor) {
-        // If the background is already a gradient or uses special format, skip
-        if (levelStyle.backgroundColor.startsWith('url') ||
-            levelStyle.backgroundColor.startsWith('linear-gradient')) {
-          continue;
+        const nodeGradient = this._createColorGradientFromBase(
+          `level${i}Gradient`, 
+          levelStyle.backgroundColor, 
+          MindmapRenderer.LIGHTEN_PERCENT, 
+          MindmapRenderer.DARKEN_PERCENT
+        );
+        
+        if (nodeGradient) {
+          gradientsString += nodeGradient;
+          gradients.push(i);
         }
-
-        // Create a gradient variant of the background color
-        const baseColor = levelStyle.backgroundColor;
-        const lightColor = this._lightenColor(baseColor, 30);
-        const darkColor = this._darkenColor(baseColor, 10);
-
-        defs += this._createGradient(`level${i}Gradient`, lightColor, darkColor);
-        gradients.push(i);
       }
       
-      // Create connection gradients if tapered connections are enabled
-      if (levelStyle && levelStyle.connectionTapered && levelStyle.connectionGradient && levelStyle.connectionColor) {
-        const baseColor = levelStyle.connectionColor;
-        const lightColor = this._lightenColor(baseColor, 20);
-        const darkColor = this._darkenColor(baseColor, 10);
+      // Create connection gradient if tapered connections are enabled
+      if (levelStyle && levelStyle.connectionTapered && 
+          levelStyle.connectionGradient && levelStyle.connectionColor) {
         
-        defs += this._createGradient(`level${i}ConnectionGradient`, lightColor, darkColor);
+        gradientsString += this._createColorGradientFromBase(
+          `level${i}ConnectionGradient`, 
+          levelStyle.connectionColor, 
+          MindmapRenderer.LIGHTEN_PERCENT - 10, // Slightly less lightening for connections
+          MindmapRenderer.DARKEN_PERCENT
+        );
       }
     }
+
+    return { gradientsString, gradients };
+  }
+
+  /**
+   * Create a drop shadow filter definition
+   * @private
+   * @return {string} SVG filter definition for drop shadow
+   */
+  _createDropShadowFilter() {
+    return '\n<filter id="dropShadow">' +
+           '<feGaussianBlur in="SourceAlpha" stdDeviation="2"/>' +
+           '<feOffset dx="2" dy="2" result="offsetblur"/>' +
+           '<feComponentTransfer><feFuncA type="linear" slope="0.2"/></feComponentTransfer>' +
+           '<feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>' +
+           '</filter>';
+  }
+
+  /**
+   * Create all symbol definitions for reuse
+   * @private
+   * @return {string} SVG symbol definitions
+   */
+  _createSymbolDefinitions() {
+    let symbols = '';
+    
+    // Base components for reuse
+    symbols += '\n<symbol id="circle-base" viewBox="0 0 12 12">' +
+               '<circle cx="6" cy="6" r="5.5" stroke-width="1"/>' +
+               '</symbol>';
+    
+    symbols += '\n<symbol id="plus-shape" viewBox="0 0 12 12">' +
+               '<line x1="3" y1="6" x2="9" y2="6" stroke="#ffffff" stroke-width="1.5"/>' +
+               '<line x1="6" y1="3" x2="6" y2="9" stroke="#ffffff" stroke-width="1.5"/>' +
+               '</symbol>';
+    
+    symbols += '\n<symbol id="minus-shape" viewBox="0 0 12 12">' +
+               '<line x1="3" y1="6" x2="9" y2="6" stroke="#ffffff" stroke-width="1.5"/>' +
+               '</symbol>';
+    
+    // Generic wrappers for indicators
+    symbols += '\n<symbol id="indicator-collapsed" viewBox="0 0 12 12" width="12" height="12">' +
+               '<use href="#circle-base" width="12" height="12"/>' +
+               '<use href="#plus-shape" width="12" height="12"/>' +
+               '</symbol>';
+            
+    symbols += '\n<symbol id="indicator-expanded" viewBox="0 0 12 12" width="12" height="12">' +
+               '<use href="#circle-base" width="12" height="12"/>' +
+               '<use href="#minus-shape" width="12" height="12"/>' +
+               '</symbol>';
+               
+    return symbols;
+  }
+
+  /**
+   * Create gradient and filter definitions
+   * @return {string} SVG defs element with gradients and filters
+   */
+  createDefs() {
+    let defs = '<defs>\n';
+
+    // Create color gradients
+    const { gradientsString, gradients } = this._createColorGradients();
+    defs += gradientsString;
 
     // Store the gradients for use in node rendering
     this.gradients = gradients;
+
+    // Add drop shadow filter
+    defs += this._createDropShadowFilter();
     
-    // Add specific connection gradients if needed
-    if (this.connectionGradients && this.connectionGradients.size > 0) {
-      for (const gradientInfo of this.connectionGradients) {
-        const baseColor = gradientInfo.color;
-        const lightColor = this._lightenColor(baseColor, 20);
-        const darkColor = this._darkenColor(baseColor, 10);
-        
-        defs += this._createGradient(gradientInfo.id, lightColor, darkColor);
+    // Add symbol definitions
+    defs += this._createSymbolDefinitions();
+
+    defs += '\n</defs>';
+    return defs;
+  }
+
+  /**
+   * Create a generic SVG element with arbitrary attributes
+   * @private
+   * @param {string} elementType - The SVG element type (rect, path, text, etc.)
+   * @param {Object} attributes - Key-value pairs of element attributes
+   * @param {string} content - Optional content for elements that can have content
+   * @return {string} SVG element string
+   */
+  _createSvgElement(elementType, attributes, content = '') {
+    // Start the opening tag
+    let element = `<${elementType}`;
+    
+    // Add all attributes
+    for (const [key, value] of Object.entries(attributes)) {
+      if (value !== undefined && value !== null) {
+        // Convert camelCase to kebab-case for attribute names
+        const attributeName = key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+        element += ` ${attributeName}="${value}"`;
       }
     }
-
-    // Drop shadow filter
-    defs += `<filter id="dropShadow">
-                    <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
-                    <feOffset dx="2" dy="2" result="offsetblur"/>
-                    <feComponentTransfer><feFuncA type="linear" slope="0.2"/></feComponentTransfer>
-                    <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
-                </filter>`;
-
-    defs += '</defs>';
-    return defs;
+    
+    // Close the element appropriately based on whether it has content
+    if (content || elementType === 'text') {
+      element += `>${content}</${elementType}>\n`;
+    } else {
+      element += ' />\n';
+    }
+    
+    return element;
   }
 
   /**
@@ -150,10 +278,23 @@ class MindmapRenderer {
    * @return {string} SVG linearGradient element
    */
   _createGradient(id, color1, color2) {
-    return `<linearGradient id="${id}" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" style="stop-color:${color1};stop-opacity:1" />
-                    <stop offset="100%" style="stop-color:${color2};stop-opacity:1" />
-                </linearGradient>`;
+    const stop1 = this._createSvgElement('stop', {
+      offset: '0%', 
+      style: `stop-color:${color1};stop-opacity:1`
+    });
+    
+    const stop2 = this._createSvgElement('stop', {
+      offset: '100%', 
+      style: `stop-color:${color2};stop-opacity:1`
+    });
+    
+    return this._createSvgElement('linearGradient', {
+      id: id,
+      x1: '0%',
+      y1: '0%',
+      x2: '100%',
+      y2: '100%'
+    }, stop1 + stop2);
   }
 
   /**
@@ -181,26 +322,62 @@ class MindmapRenderer {
     return this._drawNodeRecursive(this.model.getRoot());
   }
 
+  /**
+   * Draw parent drop zone (split into two parts)
+   * @private
+   * @param {Object} node - The node to draw drop zone for
+   * @param {number} parentChildPadding - Padding between parent and child nodes
+   * @return {string} SVG rect elements for the parent drop zones
+   */
   _drawParentDropZone(node, parentChildPadding) {
-    return `<rect x="${node.boundingBox.x}" y="${node.boundingBox.y - parentChildPadding/2}"
-     width="${node.width}" height="${node.boundingBox.height / 2 + parentChildPadding / 2}" fill="#500000"
-     stroke="#450000"
-     fill-opacity="0.1" class="node-shape" /> `  +
-     `<rect x="${node.boundingBox.x}" y="${node.boundingBox.y + node.boundingBox.height / 2}"
-     width="${node.width}" height="${node.boundingBox.height / 2  + parentChildPadding / 2}" fill="#000060"
-     stroke="#000045"
-     fill-opacity="0.1" class="node-shape" />`
+    // Top drop zone (red)
+    const topZone = this._createRectElement({
+      x: node.boundingBox.x,
+      y: node.boundingBox.y - parentChildPadding/2,
+      width: node.width,
+      height: node.boundingBox.height / 2 + parentChildPadding / 2,
+      fill: "#500000",
+      stroke: "#450000",
+      fillOpacity: 0.1,
+      className: "drop-zone parent-drop-zone-top"
+    });
+    
+    // Bottom drop zone (blue)
+    const bottomZone = this._createRectElement({
+      x: node.boundingBox.x,
+      y: node.boundingBox.y + node.boundingBox.height / 2,
+      width: node.width,
+      height: node.boundingBox.height / 2 + parentChildPadding / 2,
+      fill: "#000060",
+      stroke: "#000045",
+      fillOpacity: 0.1,
+      className: "drop-zone parent-drop-zone-bottom"
+    });
+    
+    return topZone + bottomZone;
   }
 
+  /**
+   * Draw child drop zone
+   * @private
+   * @param {Object} node - The node to draw drop zone for
+   * @param {Object} layout - The layout object
+   * @param {number} parentChildPadding - Padding between parent and child nodes
+   * @return {string} SVG rect element for the child drop zone
+   */
   _drawChildDropZone(node, layout, parentChildPadding) {
-    var additionalSpan = 0;
-    if (!node.hasChildren()) {
-        additionalSpan = 300;
-    }
-    return `<rect x="${node.boundingBox.x+node.width}" y="${node.boundingBox.y - parentChildPadding / 2}"
-     width="${layout.parentPadding + additionalSpan}" height="${node.boundingBox.height + parentChildPadding}" fill="#005000"
-     fill-opacity="0.1" stroke="#004000" class="node-shape"
-     />`
+    const additionalSpan = node.hasChildren() ? 0 : 300;
+    
+    return this._createRectElement({
+      x: node.boundingBox.x + node.width,
+      y: node.boundingBox.y - parentChildPadding / 2,
+      width: layout.parentPadding + additionalSpan,
+      height: node.boundingBox.height + parentChildPadding,
+      fill: "#005000",
+      stroke: "#004000",
+      fillOpacity: 0.1,
+      className: "drop-zone child-drop-zone"
+    });
   }
 
   /**
@@ -271,30 +448,38 @@ class MindmapRenderer {
     for (const element of node.debugElements) {
       switch (element.type) {
         case 'line':
-          debugElements.push(`<line 
-            x1="${element.x1}" 
-            y1="${element.y1}" 
-            x2="${element.x2}" 
-            y2="${element.y2}" 
-            stroke="${element.stroke}" 
-            stroke-width="${element.strokeWidth}" 
-            stroke-dasharray="${element.strokeDasharray}" />`);
+          // Create a path for the line
+          const linePath = `M ${element.x1} ${element.y1} L ${element.x2} ${element.y2}`;
+          debugElements.push(
+            this._createPathElement({
+              d: linePath,
+              stroke: element.stroke,
+              strokeWidth: element.strokeWidth,
+              strokeDasharray: element.strokeDasharray,
+              className: 'debug-line'
+            })
+          );
           break;
           
         case 'text':
-          debugElements.push(`<text 
-            x="${element.x}" 
-            y="${element.y}" 
-            text-anchor="${element.textAnchor}" 
-            fill="${element.fill}" 
-            font-size="${element.fontSize}">${element.content}</text>`);
+          debugElements.push(
+            this._createTextElement({
+              x: element.x,
+              y: element.y,
+              text: element.content,
+              fill: element.fill,
+              fontSize: element.fontSize,
+              textAnchor: element.textAnchor,
+              className: 'debug-text'
+            })
+          );
           break;
           
         // Add more cases for other element types as needed
       }
     }
     
-    return `<g class="debug-elements" id="${node.id}_debug">${debugElements.join('\n')}</g>`;
+    return `<g class="debug-elements" id="${node.id}_debug">${debugElements.join('')}</g>`;
   }
 
   /**
@@ -324,6 +509,18 @@ class MindmapRenderer {
       ];
     }
   }
+  
+  /**
+   * Create a bezier curve path string
+   * @private
+   * @param {ConnectionPoint} startPoint - The starting connection point
+   * @param {ConnectionPoint} endPoint - The ending connection point
+   * @return {string} SVG path data for the curve
+   */
+  _createBezierCurvePath(startPoint, endPoint) {
+    const [cp1x, cp1y, cp2x, cp2y] = this._calculateBezierControlPoints(startPoint, endPoint);
+    return `M ${startPoint.x} ${startPoint.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endPoint.x} ${endPoint.y}`;
+  }
 
   /**
    * Calculate perpendicular offset points based on connection point direction
@@ -337,38 +534,95 @@ class MindmapRenderer {
     // Always return points in a consistent order: first point is always the "top/left" offset
     // and second point is always the "bottom/right" offset, regardless of direction
     
-    switch (point.direction) {
-      case 'top':
-        // Offset horizontally for top-pointing connection
-        return [
-          point.x - width/2, point.y,  // left point
-          point.x + width/2, point.y   // right point
-        ];
-      case 'bottom':
-        // Offset horizontally for bottom-pointing connection (same as top)
-        return [
-          point.x - width/2, point.y,  // left point
-          point.x + width/2, point.y   // right point
-        ];
-      case 'left':
-        // Offset vertically for left-pointing connection
-        return [
-          point.x, point.y - width/2,  // top point
-          point.x, point.y + width/2   // bottom point
-        ];
-      case 'right':
-        // Offset vertically for right-pointing connection (same as left)
-        return [
-          point.x, point.y - width/2,  // top point
-          point.x, point.y + width/2   // bottom point
-        ];
-      default:
-        // Default to horizontal offset if direction is unknown
-        return [
-          point.x - width/2, point.y,
-          point.x + width/2, point.y
-        ];
+    const halfWidth = width / 2;
+    const isVertical = point.direction === 'left' || point.direction === 'right';
+    
+    if (isVertical) {
+      // For left/right directions, offset vertically
+      return [
+        point.x, point.y - halfWidth,  // top point
+        point.x, point.y + halfWidth   // bottom point
+      ];
+    } else {
+      // For top/bottom/default directions, offset horizontally
+      return [
+        point.x - halfWidth, point.y,  // left point
+        point.x + halfWidth, point.y   // right point
+      ];
     }
+  }
+
+  /**
+   * Create a path SVG element
+   * @private
+   * @param {object} props - Path properties
+   * @return {string} SVG path element
+   */
+  _createPathElement(props) {
+    const {
+      d,
+      id = '',
+      className = '',
+      fill = 'none',
+      stroke = 'none',
+      strokeWidth = MindmapRenderer.DEFAULT_CONNECTION_WIDTH,
+      strokeDasharray = ''
+    } = props;
+    
+    // Prepare attributes for the generic function
+    const attributes = { d };
+    
+    // Only add optional attributes if they have values
+    if (id) attributes.id = id;
+    if (className) attributes.class = className;
+    
+    // Always set fill explicitly
+    attributes.fill = fill;
+    
+    // Only add stroke attributes if stroke is specified
+    if (stroke !== 'none') {
+      attributes.stroke = stroke;
+      attributes.strokeWidth = strokeWidth;
+    }
+    
+    // Add dash array if specified
+    if (strokeDasharray) {
+      attributes.strokeDasharray = strokeDasharray;
+    }
+    
+    return this._createSvgElement('path', attributes);
+  }
+
+  /**
+   * Create a tapered connection path
+   * @private
+   * @param {ConnectionPoint} startPoint - The starting connection point
+   * @param {ConnectionPoint} endPoint - The ending connection point
+   * @param {number} startWidth - Width at the start point
+   * @param {number} endWidth - Width at the end point
+   * @return {string} SVG path data for the tapered connection
+   */
+  _createTaperedConnectionPath(startPoint, endPoint, startWidth, endWidth) {
+    // Calculate control points for the centerline curve
+    const [cp1x, cp1y, cp2x, cp2y] = this._calculateBezierControlPoints(startPoint, endPoint);
+    
+    // Calculate perpendicular offsets at start and end points
+    const [startLeftX, startLeftY, startRightX, startRightY] = 
+      this._calculatePerpendicularOffsets(startPoint, startWidth);
+    
+    const [endLeftX, endLeftY, endRightX, endRightY] = 
+      this._calculatePerpendicularOffsets(endPoint, endWidth);
+    
+    // Create the filled path - always going clockwise
+    return 'M ' + startLeftX + ' ' + startLeftY + 
+           ' C ' + (cp1x + (startLeftX - startPoint.x)) + ' ' + (cp1y + (startLeftY - startPoint.y)) + 
+           ', ' + (cp2x + (endLeftX - endPoint.x)) + ' ' + (cp2y + (endLeftY - endPoint.y)) + 
+           ', ' + endLeftX + ' ' + endLeftY + 
+           ' L ' + endRightX + ' ' + endRightY + 
+           ' C ' + (cp2x + (endRightX - endPoint.x)) + ' ' + (cp2y + (endRightY - endPoint.y)) + 
+           ', ' + (cp1x + (startRightX - startPoint.x)) + ' ' + (cp1y + (startRightY - startPoint.y)) + 
+           ', ' + startRightX + ' ' + startRightY + 
+           ' Z';
   }
 
   /**
@@ -387,52 +641,26 @@ class MindmapRenderer {
     const startWidth = parentStyle.connectionStartWidth || 8;
     const endWidth = parentStyle.connectionEndWidth || 2;
     
-    // Calculate control points for the centerline curve
-    const [cp1x, cp1y, cp2x, cp2y] = this._calculateBezierControlPoints(startPoint, endPoint);
-    
-    // Calculate perpendicular offsets at start and end points
-    // Now these are consistently ordered: [leftX, leftY, rightX, rightY] or [topX, topY, bottomX, bottomY]
-    const [startLeftX, startLeftY, startRightX, startRightY] = 
-      this._calculatePerpendicularOffsets(startPoint, startWidth);
-    
-    const [endLeftX, endLeftY, endRightX, endRightY] = 
-      this._calculatePerpendicularOffsets(endPoint, endWidth);
-    
-    // Create the filled path - always going clockwise
-    const path = `M ${startLeftX} ${startLeftY}
-                   C ${cp1x + (startLeftX - startPoint.x)} ${cp1y + (startLeftY - startPoint.y)},
-                     ${cp2x + (endLeftX - endPoint.x)} ${cp2y + (endLeftY - endPoint.y)},
-                     ${endLeftX} ${endLeftY}
-                   L ${endRightX} ${endRightY}
-                   C ${cp2x + (endRightX - endPoint.x)} ${cp2y + (endRightY - endPoint.y)},
-                     ${cp1x + (startRightX - startPoint.x)} ${cp1y + (startRightY - startPoint.y)},
-                     ${startRightX} ${startRightY}
-                   Z`;
+    // Create the tapered connection path
+    const path = this._createTaperedConnectionPath(startPoint, endPoint, startWidth, endWidth);
     
     // Get connection color from style
-    const connectionColor = parentStyle.connectionColor || '#666';
+    const connectionColor = parentStyle.connectionColor || MindmapRenderer.DEFAULT_CONNECTION_COLOR;
     
     // Check if gradient should be used
     let fill = connectionColor;
     if (parentStyle.connectionGradient) {
-      const gradientId = `gradient_${parent.id}_${child.id}`;
-      // Create a gradient in the defs section if it doesn't exist
-      if (!this.connectionGradients) {
-        this.connectionGradients = new Set();
-      }
-      
-      // Add this gradient to the set to be created in createDefs
-      this.connectionGradients.add({
-        id: gradientId,
-        color: connectionColor,
-        parent: parent,
-        child: child
-      });
-      
+      // Use level-based connection gradient instead of per-connection gradient
+      const gradientId = `level${parent.level}ConnectionGradient`;
       fill = `url(#${gradientId})`;
     }
     
-    return `<path d="${path}" fill="${fill}" />`;
+    return this._createPathElement({
+      d: path,
+      fill: fill,
+      id: `connection_${parent.id}_${child.id}`,
+      className: 'tapered-connection'
+    });
   }
 
   /**
@@ -495,39 +723,79 @@ class MindmapRenderer {
       result = this._drawTaperedConnection(parent, child, parentStyle, childStyle, startPoint, endPoint);
     } else {
       // If not using tapered, proceed with the original stroke-based connection
-      // Calculate the Bezier curve control points
-      const [cp1x, cp1y, cp2x, cp2y] = this._calculateBezierControlPoints(startPoint, endPoint);
-      
-      // Create the path with the calculated control points
-      const path = `M ${startPoint.x} ${startPoint.y}
-                     C ${cp1x} ${cp1y},
-                       ${cp2x} ${cp2y},
-                       ${endPoint.x} ${endPoint.y}`;
+      // Create the path with our bezier curve helper
+      const path = this._createBezierCurvePath(startPoint, endPoint);
 
       // Get connection color from style
-      const connectionColor = parentStyle.connectionColor || '#666';
-      const connectionWidth = parentStyle.connectionWidth || 2;
+      const connectionColor = parentStyle.connectionColor || MindmapRenderer.DEFAULT_CONNECTION_COLOR;
+      const connectionWidth = parentStyle.connectionWidth || MindmapRenderer.DEFAULT_CONNECTION_WIDTH;
 
-      result = `<path d="${path}" stroke="${connectionColor}" stroke-width="${connectionWidth}" fill="none" />`;
+      result = this._createPathElement({
+        d: path,
+        stroke: connectionColor,
+        strokeWidth: connectionWidth,
+        id: `connection_${parent.id}_${child.id}`,
+        className: 'connection'
+      });
     }
     
     console.groupEnd();
     return result;
   }
 
-    _drawBoundingBox(node) {
-        if (node.boundingBox) {
-//            console.log(node.boundingBox);
-            return `<rect x="${node.boundingBox.x}" y="${node.boundingBox.y}"
-                          width="${node.boundingBox.width}" height="${node.boundingBox.height}"
-                          rx="2" ry="2" fill="#101010" fill-opacity="0.05"
-                          stroke="#001000" stroke-width="1" filter="url(#dropShadow)"
-                          id="${node.id}_bbox" class="node-shape" />`;
-        } else {
-//            console.log('no bounding box!');
-            return '';
-        }
-    }
+  /**
+   * Create a rectangle SVG element
+   * @private
+   * @param {object} props - Rectangle properties
+   * @return {string} SVG rect element
+   */
+  _createRectElement(props) {
+    const {
+      x, y, width, height,
+      id = '',
+      className = 'node-shape',
+      rx = MindmapRenderer.DEFAULT_BORDER_RADIUS, 
+      ry = MindmapRenderer.DEFAULT_BORDER_RADIUS,
+      fill = '#f5f5f5', 
+      fillOpacity = MindmapRenderer.DEFAULT_FILL_OPACITY,
+      stroke = '#fff', 
+      strokeWidth = MindmapRenderer.DEFAULT_BORDER_WIDTH,
+      filter = 'url(#dropShadow)'
+    } = props;
+    
+    // Prepare attributes for the generic function
+    const attributes = {
+      x, y, width, height, rx, ry,
+      fill, fillOpacity, stroke, strokeWidth,
+      class: className
+    };
+    
+    // Only add optional attributes if they have values
+    if (id) attributes.id = id;
+    if (filter) attributes.filter = filter;
+    
+    return this._createSvgElement('rect', attributes);
+  }
+
+  _drawBoundingBox(node) {
+      if (node.boundingBox) {
+          return this._createRectElement({
+              x: node.boundingBox.x,
+              y: node.boundingBox.y,
+              width: node.boundingBox.width,
+              height: node.boundingBox.height,
+              id: node.id + '_bbox',
+              rx: 2,
+              ry: 2,
+              fill: '#101010',
+              fillOpacity: 0.05,
+              stroke: '#001000',
+              strokeWidth: 1
+          });
+      } else {
+          return '';
+      }
+  }
 
   /**
    * Draw the shape for a node
@@ -537,22 +805,133 @@ class MindmapRenderer {
    */
   _drawNodeShape(node) {
     const levelStyle = this.styleManager.getLevelStyle(node.level);
-    const fillColor = this.getFillColor(node);
-    const borderRadius = levelStyle.borderRadius || 5;
-    const borderColor = levelStyle.borderColor || '#fff';
-    const borderWidth = levelStyle.borderWidth || 1.5;
-    const fillOpacity = levelStyle.fillOpacity || 0.5;
+    
+    return this._createRectElement({
+        x: node.x,
+        y: node.y,
+        width: node.width,
+        height: node.height,
+        id: node.id + '_rect',
+        rx: levelStyle.borderRadius || MindmapRenderer.DEFAULT_BORDER_RADIUS,
+        ry: levelStyle.borderRadius || MindmapRenderer.DEFAULT_BORDER_RADIUS,
+        fill: this.getFillColor(node),
+        fillOpacity: levelStyle.fillOpacity || MindmapRenderer.DEFAULT_FILL_OPACITY,
+        stroke: levelStyle.borderColor || '#fff',
+        strokeWidth: levelStyle.borderWidth || MindmapRenderer.DEFAULT_BORDER_WIDTH
+    });
+  }
 
-//    return `<rect x="${node.x}" y="${node.y}"
-//                      width="${node.width}" height="${node.height}"
-//                      rx="${borderRadius}" ry="${borderRadius}" fill="${fillColor}"
-//                      stroke="${borderColor}" stroke-width="${borderWidth}" filter="url(#dropShadow)"
-//                      id="${node.id}_rect" class="node-shape" />`;
-    return `<rect x="${node.x}" y="${node.y}"
-                      width="${node.width}" height="${node.height}"
-                      rx="${borderRadius}" ry="${borderRadius}" fill="${fillColor}" fill-opacity="${fillOpacity}"
-                      stroke="${borderColor}" stroke-width="${borderWidth}" filter="url(#dropShadow)"
-                      id="${node.id}_rect" class="node-shape" />`;  }
+  /**
+   * Create a basic SVG text element
+   * @private
+   * @param {object} props - Text properties
+   * @return {string} SVG text element
+   */
+  _createTextElement(props) {
+    const {
+      x, y, text,
+      id = '',
+      fontFamily = MindmapRenderer.DEFAULT_FONT_FAMILY,
+      fontSize = MindmapRenderer.DEFAULT_FONT_SIZE,
+      fontWeight = MindmapRenderer.DEFAULT_FONT_WEIGHT,
+      fill = '#333',
+      textAnchor = 'start',
+      dominantBaseline = 'middle',
+      className = 'node-text',
+      pointerEvents = 'none'
+    } = props;
+    
+    // Prepare attributes for the generic function
+    const attributes = {
+      x, y,
+      id,
+      fontFamily,
+      fontSize: `${fontSize}px`,
+      fontWeight,
+      fill,
+      textAnchor,
+      class: className,
+      pointerEvents
+    };
+    
+    // Only add optional attributes if they have values
+    if (dominantBaseline) {
+      attributes.dominantBaseline = dominantBaseline;
+    }
+    
+    return this._createSvgElement('text', attributes, this._escapeXml(text));
+  }
+  
+  /**
+   * Create a tspan element for multiline text
+   * @private
+   * @param {object} props - Tspan properties
+   * @param {string} content - Text content
+   * @return {string} SVG tspan element
+   */
+  _createTspanElement(props, content) {
+    const { x, y, dy } = props;
+    
+    const attributes = {};
+    if (x !== undefined) attributes.x = x;
+    if (y !== undefined) attributes.y = y;
+    if (dy !== undefined) attributes.dy = dy;
+    
+    return this._createSvgElement('tspan', attributes, this._escapeXml(content));
+  }
+  
+  /**
+   * Create an SVG text element with multiple lines (tspans)
+   * @private
+   * @param {object} props - Text properties
+   * @param {array} lines - Array of text lines
+   * @param {number} lineHeight - Height between lines
+   * @param {number} startY - Starting Y position
+   * @return {string} SVG text element with tspans
+   */
+  _createMultilineTextElement(props, lines, lineHeight, startY) {
+    const {
+      x, y, 
+      id = '',
+      fontFamily = MindmapRenderer.DEFAULT_FONT_FAMILY,
+      fontSize = MindmapRenderer.DEFAULT_FONT_SIZE,
+      fontWeight = MindmapRenderer.DEFAULT_FONT_WEIGHT,
+      fill = '#333',
+      textAnchor = 'start',
+      className = 'node-text',
+      pointerEvents = 'none'
+    } = props;
+    
+    // Create tspan elements for each line
+    let tspanContent = '';
+    for (let i = 0; i < lines.length; i++) {
+      const tspanProps = { x };
+      
+      if (i === 0) {
+        // First line - set the initial position
+        tspanProps.y = startY;
+      } else {
+        // Subsequent lines - use dy for consistent line spacing
+        tspanProps.dy = lineHeight;
+      }
+      
+      tspanContent += this._createTspanElement(tspanProps, lines[i]);
+    }
+    
+    // Create the parent text element with all tspans
+    const attributes = {
+      id,
+      fontFamily,
+      fontSize: `${fontSize}px`,
+      fontWeight,
+      fill,
+      textAnchor,
+      class: className,
+      pointerEvents
+    };
+    
+    return this._createSvgElement('text', attributes, tspanContent);
+  }
 
   /**
    * Draw text for a node
@@ -563,91 +942,134 @@ class MindmapRenderer {
    */
   _drawNodeText(node, insideBox) {
     const levelStyle = this.styleManager.getLevelStyle(node.level);
-    const fontSize = levelStyle.fontSize || 14;
-    const fontWeight = levelStyle.fontWeight || 'normal';
-    const fontFamily = levelStyle.fontFamily || 'Arial, sans-serif';
+    
+    // Calculate text position based on node type
+    let x, y, fill, textAnchor;
+    if (insideBox) {
+      // Text inside a box (centered)
+      x = node.x + node.width / 2;
+      y = node.y + node.height / 2;
+      fill = levelStyle.textColor || MindmapRenderer.DEFAULT_TEXT_COLOR_BOXED;
+      textAnchor = "middle";
+    } else {
+      // Standalone text (no box)
+      x = node.x;
+      y = node.y + node.height / 2;
+      fill = levelStyle.textColor || MindmapRenderer.DEFAULT_TEXT_COLOR_PLAIN;
+      textAnchor = "start";
+    }
+    
+    // Common text properties
+    const textProps = {
+      x: x,
+      y: y,
+      id: node.id + '_text',
+      fontFamily: levelStyle.fontFamily || MindmapRenderer.DEFAULT_FONT_FAMILY,
+      fontSize: levelStyle.fontSize || MindmapRenderer.DEFAULT_FONT_SIZE,
+      fontWeight: levelStyle.fontWeight || MindmapRenderer.DEFAULT_FONT_WEIGHT,
+      fill: fill,
+      textAnchor: textAnchor
+    };
     
     // Get text wrapping configuration
     const wrapConfig = levelStyle.getTextWrapConfig();
     const textWrap = wrapConfig.textWrap;
     const maxWidth = wrapConfig.maxWidth;
     const maxWordLength = wrapConfig.maxWordLength;
-
-    let x, y, fill, textAnchor;
-
-    if (insideBox) {
-      // Text inside a box (centered)
-      x = node.x + node.width / 2;
-      y = node.y + node.height / 2;
-      fill = levelStyle.textColor || "white";
-      textAnchor = "middle";
-    } else {
-      // Standalone text (no box)
-      x = node.x;
-      y = node.y + node.height / 2;
-      fill = levelStyle.textColor || "#333";
-      textAnchor = "start";
-    }
     
     // Get text wrapping calculation from textMetrics
-    // Ensure we have a reference to textMetrics
     const textMetrics = typeof window !== 'undefined' ? window.textMetrics : require('../utils/text-metrics').default;
     
     const wrappedText = textMetrics.wrapText(
       node.text,
       maxWidth,
-      fontFamily,
-      fontSize,
-      fontWeight,
+      textProps.fontFamily,
+      textProps.fontSize,
+      textProps.fontWeight,
       textWrap,
       maxWordLength
     );
     
-    let textSVG;
+    // Render based on whether text needs to be wrapped
     if (wrappedText.lines.length === 1 || textWrap === 'none') {
       // Simple case - just one line
-      textSVG = `<text x="${x}" y="${y}"
-                        id="${node.id}_text"
-                        font-family="${fontFamily}" font-size="${fontSize}px" font-weight="${fontWeight}"
-                        fill="${fill}" text-anchor="${textAnchor}" dominant-baseline="middle"
-                        class="node-text" pointer-events="none">
-                        ${this._escapeXml(node.text)}
-                  </text>`;
+      return this._createTextElement({
+        ...textProps,
+        text: node.text,
+        dominantBaseline: 'middle'
+      });
     } else {
       // Multi-line text with tspans
       const lineHeight = wrappedText.lineHeight;
       const totalHeight = wrappedText.height;
       
       // Calculate starting y position to center text block
-      let startY = y - (totalHeight / 2) + (lineHeight / 2);
+      const startY = y - (totalHeight / 2) + (lineHeight / 2);
       
-      // Build text with tspans for each line
-      textSVG = `<text id="${node.id}_text"
-                        font-family="${fontFamily}" font-size="${fontSize}px" font-weight="${fontWeight}"
-                        fill="${fill}" text-anchor="${textAnchor}"
-                        class="node-text" pointer-events="none">`;
-                        
-      // Add each line as a tspan element
-      for (let i = 0; i < wrappedText.lines.length; i++) {
-        // Only use y for the first line, then use dy for subsequent lines
-        // This avoids the double spacing issue
-        if (i === 0) {
-          // First line - set the initial position
-          textSVG += `<tspan x="${x}" y="${startY}">
-                     ${this._escapeXml(wrappedText.lines[i])}
-                   </tspan>`;
-        } else {
-          // Subsequent lines - use dy for consistent line spacing
-          textSVG += `<tspan x="${x}" dy="${lineHeight}">
-                     ${this._escapeXml(wrappedText.lines[i])}
-                   </tspan>`;
-        }
-      }
-      
-      textSVG += `</text>`;
+      return this._createMultilineTextElement(
+        textProps, 
+        wrappedText.lines, 
+        lineHeight, 
+        startY
+      );
+    }
+  }
+
+  /**
+   * Create a use element for SVG symbols
+   * @private
+   * @param {object} props - Use element properties
+   * @return {string} SVG use element
+   */
+  _createUseElement(props) {
+    const {
+      href, x, y, id = '',
+      width, height,
+      fill, stroke
+    } = props;
+    
+    // Convert props to attributes object for the generic function
+    const attributes = {
+      href, x, y, 
+      width, height, 
+      fill, stroke
+    };
+    
+    // Add id if provided
+    if (id) {
+      attributes.id = id;
     }
     
-    return textSVG;
+    return this._createSvgElement('use', attributes);
+  }
+
+  /**
+   * Calculate the position for a collapse indicator
+   * @private
+   * @param {Object} node - The node
+   * @param {Object} levelStyle - The level style
+   * @return {Object} - Position for the indicator {x, y}
+   */
+  _calculateIndicatorPosition(node, levelStyle) {
+    const parentLayout = levelStyle.getLayout();
+    const connectionPoint = parentLayout.getParentConnectionPoint(node, levelStyle, null);
+    const radius = MindmapRenderer.INDICATOR_RADIUS;
+    
+    // Check if it's a vertical or horizontal layout
+    const isVerticalLayout = connectionPoint.direction === 'bottom' || connectionPoint.direction === 'top';
+    const directionMultiplier = (connectionPoint.direction === 'bottom' || connectionPoint.direction === 'right') ? 1 : -1;
+
+    if (isVerticalLayout) {
+      return {
+        x: connectionPoint.x,
+        y: connectionPoint.y + directionMultiplier * radius
+      };
+    } else {
+      return {
+        x: connectionPoint.x + directionMultiplier * radius,
+        y: connectionPoint.y
+      };
+    }
   }
 
   /**
@@ -658,47 +1080,29 @@ class MindmapRenderer {
    */
   _drawCollapseIndicator(node) {
     const levelStyle = this.styleManager.getLevelStyle(node.level);
-    const parentLayout = levelStyle.getLayout();
-
-    // Get the connection point where the indicator should be placed
-    // For collapse indicator, we pass null as childNode to get the default position
-    const connectionPoint = parentLayout.getParentConnectionPoint(node, levelStyle, null);
-    const radius = 6;
-
-    // Determine position based on layout direction
-    let indicatorX, indicatorY;
-
-    // Check if it's a vertical or horizontal layout
-    const isVerticalLayout = connectionPoint.direction === 'bottom' || connectionPoint.direction === 'top';
-    const directionMultiplier = (connectionPoint.direction === 'bottom' || connectionPoint.direction === 'right') ? 1 : -1;
-
-    if (isVerticalLayout) {
-      indicatorX = connectionPoint.x;
-      indicatorY = connectionPoint.y + directionMultiplier * radius;
-    } else {
-      indicatorX = connectionPoint.x + directionMultiplier * radius;
-      indicatorY = connectionPoint.y;
-    }
-
-    // Draw different icons based on collapsed state
+    
+    // Calculate indicator position
+    const position = this._calculateIndicatorPosition(node, levelStyle);
+    
     // Use the connection color for the indicator but darker
-    const connectionColor = levelStyle.connectionColor || '#666';
+    const connectionColor = levelStyle.connectionColor || MindmapRenderer.DEFAULT_CONNECTION_COLOR;
     const fillColor = this._darkenColor(connectionColor, 20);  // Darken the connection color
     const borderColor = this._darkenColor(connectionColor, 40);  // Even darker for the border
-    let icon;
 
-    if (node.collapsed) {
-      // Plus icon for collapsed nodes
-      icon = `<circle cx="${indicatorX}" cy="${indicatorY}" r="${radius}" fill="${fillColor}" stroke="${borderColor}" stroke-width="1" />
-              <line x1="${indicatorX - 3}" y1="${indicatorY}" x2="${indicatorX + 3}" y2="${indicatorY}" stroke="#fff" stroke-width="1.5" />
-              <line x1="${indicatorX}" y1="${indicatorY - 3}" x2="${indicatorX}" y2="${indicatorY + 3}" stroke="#fff" stroke-width="1.5" />`;
-    } else {
-      // Minus icon for expanded nodes
-      icon = `<circle cx="${indicatorX}" cy="${indicatorY}" r="${radius}" fill="${fillColor}" stroke="${borderColor}" stroke-width="1" />
-              <line x1="${indicatorX - 3}" y1="${indicatorY}" x2="${indicatorX + 3}" y2="${indicatorY}" stroke="#fff" stroke-width="1.5" />`;
-    }
-
-    return `<g class="collapse-indicator" id="${node.id}_indicator">${icon}</g>`;
+    // Center the indicator at the calculated position (indicators are 12x12)
+    const indicatorOffset = 6; // Half of the 12x12 indicator size
+    
+    // Use the appropriate symbol based on collapsed state
+    const symbolName = node.collapsed ? 'indicator-collapsed' : 'indicator-expanded';
+    
+    return this._createUseElement({
+      href: '#' + symbolName,
+      x: position.x - indicatorOffset,
+      y: position.y - indicatorOffset,
+      id: node.id + '_indicator',
+      fill: fillColor,
+      stroke: borderColor
+    });
   }
 
   /**
@@ -708,68 +1112,77 @@ class MindmapRenderer {
    * @return {string} Escaped text
    */
   _escapeXml(text) {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;');
+    // Use a single regex replacement with a lookup table for better performance
+    const xmlEntities = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&apos;'
+    };
+    
+    return text.replace(/[&<>"']/g, char => xmlEntities[char]);
   }
 
   /**
-   * Lighten a color
+   * Adjust a color by lightening or darkening
    * @private
    * @param {string} color - The base color in hex format
-   * @param {number} percent - The percentage to lighten
+   * @param {number} percent - The percentage to adjust (positive = lighten, negative = darken)
+   * @return {string} Adjusted color in hex format
+   */
+  _adjustColor(color, percent) {
+    // Remove # if present
+    color = color.replace('#', '');
+
+    // Parse the hex values
+    const r = parseInt(color.substring(0, 2), 16);
+    const g = parseInt(color.substring(2, 4), 16);
+    const b = parseInt(color.substring(4, 6), 16);
+
+    // Adjust the colors based on whether percent is positive (lighten) or negative (darken)
+    const adjustFactor = percent / 100;
+    let newR, newG, newB;
+
+    if (adjustFactor >= 0) {
+      // Lighten
+      newR = Math.min(255, r + (255 - r) * adjustFactor);
+      newG = Math.min(255, g + (255 - g) * adjustFactor);
+      newB = Math.min(255, b + (255 - b) * adjustFactor);
+    } else {
+      // Darken
+      newR = Math.max(0, r + (r * adjustFactor));
+      newG = Math.max(0, g + (g * adjustFactor));
+      newB = Math.max(0, b + (b * adjustFactor));
+    }
+
+    // Convert back to hex
+    return '#' +
+      Math.round(newR).toString(16).padStart(2, '0') +
+      Math.round(newG).toString(16).padStart(2, '0') +
+      Math.round(newB).toString(16).padStart(2, '0');
+  }
+  
+  /**
+   * Convenience method to lighten a color
+   * @private
+   * @param {string} color - The base color in hex format
+   * @param {number} percent - The percentage to lighten (positive value)
    * @return {string} Lightened color in hex format
    */
   _lightenColor(color, percent) {
-    // Remove # if present
-    color = color.replace('#', '');
-
-    // Parse the hex values
-    const r = parseInt(color.substring(0, 2), 16);
-    const g = parseInt(color.substring(2, 4), 16);
-    const b = parseInt(color.substring(4, 6), 16);
-
-    // Lighten the colors
-    const newR = Math.min(255, r + (255 - r) * (percent / 100));
-    const newG = Math.min(255, g + (255 - g) * (percent / 100));
-    const newB = Math.min(255, b + (255 - b) * (percent / 100));
-
-    // Convert back to hex
-    return '#' +
-      Math.round(newR).toString(16).padStart(2, '0') +
-      Math.round(newG).toString(16).padStart(2, '0') +
-      Math.round(newB).toString(16).padStart(2, '0');
+    return this._adjustColor(color, Math.abs(percent));
   }
 
   /**
-   * Darken a color
+   * Convenience method to darken a color
    * @private
    * @param {string} color - The base color in hex format
-   * @param {number} percent - The percentage to darken
+   * @param {number} percent - The percentage to darken (positive value)
    * @return {string} Darkened color in hex format
    */
   _darkenColor(color, percent) {
-    // Remove # if present
-    color = color.replace('#', '');
-
-    // Parse the hex values
-    const r = parseInt(color.substring(0, 2), 16);
-    const g = parseInt(color.substring(2, 4), 16);
-    const b = parseInt(color.substring(4, 6), 16);
-
-    // Darken the colors
-    const newR = Math.max(0, r - (r * (percent / 100)));
-    const newG = Math.max(0, g - (g * (percent / 100)));
-    const newB = Math.max(0, b - (b * (percent / 100)));
-
-    // Convert back to hex
-    return '#' +
-      Math.round(newR).toString(16).padStart(2, '0') +
-      Math.round(newG).toString(16).padStart(2, '0') +
-      Math.round(newB).toString(16).padStart(2, '0');
+    return this._adjustColor(color, -Math.abs(percent));
   }
 
   /**
@@ -804,49 +1217,56 @@ class MindmapRenderer {
   }
 
   /**
+   * Attach a click event handler to an element
+   * @private
+   * @param {string} elementId - The ID of the element
+   * @param {string} eventType - The event type
+   * @param {function} handler - The event handler function
+   */
+  _attachEventHandler(elementId, eventType, handler) {
+    const element = document.getElementById(elementId);
+    if (element) {
+      element.addEventListener(eventType, handler);
+    }
+  }
+
+  /**
+   * Attach a common click handler to a node element
+   * @private
+   * @param {string} nodeId - The node ID
+   * @param {string} elementType - The element type (rect, text, indicator)
+   * @param {string} eventAction - The action to trigger (toggle, debug)
+   * @param {boolean} useDoubleClick - Whether to use dblclick instead of click
+   */
+  _attachNodeEventHandler(nodeId, elementType, eventAction, useDoubleClick = false) {
+    const eventType = useDoubleClick ? 'dblclick' : 'click';
+    const elementId = `${nodeId}_${elementType}`;
+    
+    this._attachEventHandler(elementId, eventType, (event) => {
+      // For debug action, prevent propagation only if not ctrl-click
+      if (eventAction === 'debug' && !event.ctrlKey) {
+        event.stopPropagation();
+      }
+      eventBridge.handleNodeEvent(nodeId, eventAction);
+    });
+  }
+
+  /**
    * Attach event handlers to nodes
    */
-attachEventHandlers() {
-  this.nodeMap.forEach((node, nodeId) => {
-    // Add event listener to node shape
-    const nodeRect = document.getElementById(`${nodeId}_rect`);
-    if (nodeRect) {
-      // Double-click event for toggling collapse state
-      nodeRect.addEventListener('dblclick', () => {
-        eventBridge.handleNodeEvent(nodeId, 'toggle');
-      });
-
-      // Single-click event for debugging node properties
-      nodeRect.addEventListener('click', (event) => {
-        // Prevent event from triggering unwanted behaviors
-        if (!event.ctrlKey) {
-          event.stopPropagation();
-          eventBridge.handleNodeEvent(nodeId, 'debug');
-        }
-      });
-    }
-
-    // Add event listener to text as well for better UX
-    const nodeText = document.getElementById(`${nodeId}_text`);
-    if (nodeText) {
-      nodeText.addEventListener('click', (event) => {
-        // Prevent event from triggering unwanted behaviors
-        if (!event.ctrlKey) {
-          event.stopPropagation();
-          eventBridge.handleNodeEvent(nodeId, 'debug');
-        }
-      });
-    }
-
-    // Add event listener to collapse/expand indicator
-    const nodeIndicator = document.getElementById(`${nodeId}_indicator`);
-    if (nodeIndicator) {
-      nodeIndicator.addEventListener('click', () => {
-        eventBridge.handleNodeEvent(nodeId, 'toggle');
-      });
-    }
-  });
-}
+  attachEventHandlers() {
+    this.nodeMap.forEach((node, nodeId) => {
+      // Rect element: double-click for toggle, single-click for debug
+      this._attachNodeEventHandler(nodeId, 'rect', 'toggle', true);
+      this._attachNodeEventHandler(nodeId, 'rect', 'debug');
+      
+      // Text element: single-click for debug
+      this._attachNodeEventHandler(nodeId, 'text', 'debug');
+      
+      // Indicator element: single-click for toggle
+      this._attachNodeEventHandler(nodeId, 'indicator', 'toggle');
+    });
+  }
 
   /**
    * Get the node map
