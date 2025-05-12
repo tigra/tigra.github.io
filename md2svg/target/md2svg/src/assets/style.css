@@ -1,0 +1,596 @@
+/* General styles */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    width: 100%;
+    max-width: 100vw;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #f5f5f5;
+    display: flex;
+    overflow-x: hidden;
+    flex-direction: column;
+}
+
+header {
+    display: none;
+}
+
+footer {
+    text-align: center;
+    padding: 8px 0;
+    background-color: #2c3e50;
+    color: white;
+}
+
+h1 {
+    color: #2c3e50;
+    font-size: 1.4rem;
+    margin: 0 0 10px 0;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 8px;
+}
+
+h2 {
+    color: #3498db;
+    margin-bottom: 10px;
+    font-size: 1.2rem;
+}
+
+h3 {
+    color: #2980b9;
+    margin-bottom: 8px;
+    font-size: 1rem;
+}
+
+/* Main container and grid layout */
+main {
+    flex: 1;
+    overflow: visible; /* Changed from hidden to allow tooltips to be fully visible */
+    width: 100%;
+}
+
+.container {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 10px 0 10px 10px; /* No padding on the right */
+    box-sizing: border-box;
+    overflow: visible; /* Changed from overflow-x: hidden to allow tooltips */
+}
+
+@media (min-width: 1200px) {
+    .container {
+        grid-template-columns: 250px 1fr 8px 20%;
+        height: 100%;
+        grid-template-rows: 1fr;
+        max-width: 100%;
+        width: 100%;
+        padding-right: 0;
+        padding-left: 0;
+        margin: 0;
+    }
+
+    .left-column {
+        width: 250px;
+        min-width: 250px;
+        max-width: 250px;
+        flex: 0 0 250px;
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+    .container {
+        grid-template-columns: 250px 1fr;
+        grid-template-rows: 1fr;
+    }
+
+    .left-column {
+        width: 250px;
+        min-width: 250px;
+        max-width: 250px;
+        flex: 0 0 250px;
+    }
+}
+
+/* Ensure all panels have consistent height and spacing on small screens */
+@media (max-width: 767px) {
+    .container {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .left-column {
+        order: 1;
+    }
+
+    .middle-column {
+        order: 2;
+    }
+
+    .right-column {
+        order: 3;
+        max-width: 100%;
+        overflow: hidden;
+    }
+
+    /* Hide horizontal resizers on mobile */
+    .resizer-horizontal {
+        display: none;
+    }
+
+    /* Make vertical resizers more visible on mobile */
+    .resizer-vertical {
+        height: 10px;
+        background-color: #c1c1c1;
+    }
+}
+
+.left-column, .middle-column, .right-column {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: 100%;
+    min-width: 0; /* Prevent content from forcing column width */
+}
+
+/* Set overflow for middle and right columns only */
+.middle-column, .right-column {
+    overflow: hidden;
+}
+
+/* No overflow-hidden for left-column to allow tooltips */
+.left-column {
+    /* No overflow hidden here */
+}
+
+/* Make the children of middle and right columns resizable with explicit heights */
+.middle-column {
+    position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.middle-column > .editor-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60%;
+    width: auto;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.middle-column > .svg-source-container {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 40%;
+    width: auto;
+    overflow: hidden;
+    box-sizing: border-box;
+    /* bottom will be positioned by resizer */
+}
+
+.right-column {
+    position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.right-column > .preview-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    width: auto;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.right-column > .result-container {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 50%;
+    width: auto;
+    overflow: hidden;
+    box-sizing: border-box;
+    /* bottom will be positioned by resizer */
+}
+
+/* Resizers */
+.resizer {
+    background-color: #e3e3e3;
+    position: relative;
+    touch-action: none;
+}
+
+.resizer:hover {
+    background-color: #c1c1c1;
+}
+
+.resizer-horizontal {
+    cursor: col-resize;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: background-color 0.2s;
+}
+
+.resizer-horizontal:hover {
+    background-color: #a0c0e0;
+}
+
+.resizer-horizontal::after {
+    content: "";
+    width: 3px;
+    height: 60px;
+    background-color: #666;
+    border-radius: 2px;
+    box-shadow: 0 0 0 rgba(255,255,255,0.5), 1px 0 0 rgba(0,0,0,0.1);
+}
+
+.resizer-vertical {
+    cursor: row-resize;
+    height: 10px;
+    width: 100%;
+    z-index: 10;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    left: 0;
+    right: 0;
+    transition: background-color 0.2s;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+.resizer-vertical:hover {
+    background-color: #a0c0e0;
+}
+
+.resizer-vertical::after {
+    content: "";
+    height: 3px;
+    width: 60px;
+    background-color: #666;
+    border-radius: 2px;
+    box-shadow: 0 -1px 0 rgba(255,255,255,0.5), 0 1px 0 rgba(0,0,0,0.1);
+}
+
+/* Styles for active resizing */
+.resizer-active, .resizer-vertical:active {
+    background-color: #77a3d9;
+}
+
+/* Method config container - additional styling */
+.method-config-container {
+    position: sticky;
+    top: 5px;
+    display: flex;
+    flex-direction: column;
+    max-height: 100%;
+}
+
+.methods-and-button {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+
+.editor-container, .preview-container, .result-container,
+.method-config-container, .svg-source-container {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
+    /* Flex will be explicitly set to 'none' and height to percentage values */
+}
+
+/* Markdown input */
+#markdown-input {
+    width: 100%;
+    height: calc(100% - 45px);
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: 'Courier New', Courier, monospace;
+    resize: none;
+    margin-bottom: 10px;
+    box-sizing: border-box;
+    max-width: 100%;
+}
+
+/* SVG Source */
+.svg-source-container .preview-box {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: calc(100% - 40px);
+}
+
+.svg-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: auto;
+}
+
+/* Left column styling */
+.left-column {
+    /* Highlight the method selection area */
+    background-color: #f8f8f8;
+    padding: 10px;
+    border-radius: 8px;
+    align-self: start;
+    height: 100%;
+    overflow: visible; /* Changed from 'auto' to allow tooltips to appear outside */
+    /* Fixed width is applied in media queries */
+}
+
+/* Middle column styling */
+/* Style handled directly in the column class above */
+
+#svg-code {
+    width: 100%;
+    height: calc(100% - 40px);
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: 'Courier New', Courier, monospace;
+    resize: none;
+    background-color: #f8f8f8;
+    box-sizing: border-box;
+    max-width: 100%;
+}
+
+/* Conversion options */
+.conversion-options {
+    margin-bottom: 5px;
+    padding: 8px;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+    border: 1px solid #eee;
+    overflow-y: auto;
+    max-height: calc(100vh - 140px);
+    /* Ensure proper stacking context for tooltips */
+    position: relative;
+    z-index: 1;
+}
+
+.radio-group {
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    position: relative;
+    padding: 2px 0;
+}
+
+.radio-group input[type="radio"] {
+    margin-right: 8px;
+}
+
+.radio-group label {
+    cursor: pointer;
+    position: relative;
+}
+
+.radio-group label::after {
+    content: "ℹ️";
+    font-size: 12px;
+    margin-left: 5px;
+    color: #3498db;
+    opacity: 0.7;
+}
+
+/* Tooltip styles */
+.tooltip {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+/* Hidden original tooltip texts, only used for cloning */
+.tooltip-text {
+    display: none; /* Hidden by default - will be cloned by the TooltipManager */
+}
+
+/* Global tooltip container styles */
+#global-tooltip-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: visible;
+    pointer-events: none;
+    z-index: 99999;
+}
+
+/* Styles for cloned tooltips in the global container */
+.cloned-tooltip {
+    visibility: hidden;
+    position: fixed;
+    z-index: 99999;
+    width: 280px;
+    background-color: #2c3e50;
+    color: white;
+    text-align: left;
+    border-radius: 6px;
+    padding: 12px;
+    box-shadow: 0 5px 10px rgba(0,0,0,0.2);
+    font-size: 14px;
+    line-height: 1.4;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    overflow: visible;
+}
+
+
+.tooltip strong {
+    color: #3498db;
+}
+
+/* Add hover effect to the radio options */
+.radio-group:hover {
+    background-color: #f0f0f0;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    padding: 3px 5px;
+}
+
+/* Preview box */
+.preview-box {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+    overflow: auto;
+    background-color: #fcfcfc;
+    flex: 1;
+    box-sizing: border-box;
+    max-width: 100%;
+    word-wrap: break-word;
+}
+
+/* HTML Preview styling */
+#html-preview {
+    flex: 1;
+    overflow: auto;
+    max-width: 100%;
+}
+
+#html-preview h1 {
+    color: #2c3e50;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+    max-width: 100%;
+    word-wrap: break-word;
+}
+
+#html-preview strong {
+    color: #c0392b;
+}
+
+#html-preview ul {
+    padding-left: 20px;
+    margin: 15px 0;
+}
+
+#html-preview blockquote {
+    border-left: 4px solid #3498db;
+    padding-left: 15px;
+    color: #7f8c8d;
+    margin: 15px 0;
+}
+
+#html-preview a {
+    color: #3498db;
+    text-decoration: none;
+}
+
+#html-preview a:hover {
+    text-decoration: underline;
+}
+
+#html-preview code {
+    background-color: #f8f8f8;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+#html-preview pre {
+    background-color: #f8f8f8;
+    padding: 10px;
+    border-radius: 5px;
+    overflow-x: auto;
+    max-width: 100%;
+}
+
+/* SVG output section */
+#svg-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: white;
+    border: 1px dashed #ccc;
+    border-radius: 4px;
+    padding: 10px;
+    overflow: auto;
+    box-sizing: border-box;
+    max-width: 100%;
+}
+
+/* Buttons */
+button {
+    padding: 8px 12px;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+button:hover {
+    background-color: #2980b9;
+}
+
+#convert-btn {
+    margin-top: 0;
+    width: 100%;
+    flex-shrink: 0;
+}
+
+#download-btn {
+    background-color: #27ae60;
+}
+
+#copy-btn {
+    background-color: #3498db;
+}
+
+#download-btn:hover {
+    background-color: #2ecc71;
+}
+
+/* Footer */
+footer {
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #f0f0f0;
+    text-align: center;
+    font-size: 0.8rem;
+}
